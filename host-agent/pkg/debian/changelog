@@ -1,4 +1,4 @@
-firecracker-cloudstack-agent (0.3.0-1) unstable; urgency=medium
+firecracker-cloudstack-agent (0.1.0-1) unstable; urgency=medium
   * Make API truly RESTful; consolidate legacy RPC endpoints into resource routes
   * Add POST /v1/vms to create+start VMs; persist network config derived from Spec
   * Add per-VM actions: start/stop/reboot/status/delete under /v1/vms/{name}
@@ -6,34 +6,14 @@ firecracker-cloudstack-agent (0.3.0-1) unstable; urgency=medium
   * Keep /v1/network-config/{name} endpoints for recovery tooling (apply/get/delete)
   * Allow CLI/REST to replay Specs when no saved config exists; add CLI recover
   * Parse NICs (deviceId, mac, vlan) from CloudStack payload into Spec/network config
-  * Cleanup: remove legacy /v1/{prepare,start,stop,reboot,delete,status,net/*,write-config}
-  * Docs: update root README with full workflow; remove host-agent README
-  * Breaking change: clients must migrate to new REST endpoints
-
- -- Marco Sinhoreli <msinhore@gmail.com>  Mon, 22 Sep 2025 15:38:29 +0200
-
-firecracker-cloudstack-agent (0.2.0-1) unstable; urgency=medium
-
-  * Major refactoring: Modularized codebase for better maintainability
   * Separated orchestration layer into dedicated modules
   * Created dedicated modules for configuration, state, and utilities
   * Improved code organization with clear separation of concerns
-  * Enhanced API and CLI modules with better structure
-  * Updated package structure to reflect new modular architecture
   * Improved code quality and PEP8 compliance
   * Better error handling and validation
   * Enhanced documentation and code comments
-
- -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 12 Sep 2024 16:46:00 +0000
-
-firecracker-cloudstack-agent (0.1.0-1) unstable; urgency=low
-
-  * Initial release of Firecracker CloudStack Agent
-  * FastAPI-based REST API for managing Firecracker microVMs
   * Typer-based CLI interface
   * Pluggable storage backends (file, LVM, LVM-thin)
   * Network management with VLAN support
-  * Systemd integration
-  * CloudStack integration ready
 
- -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 12 Sep 2024 16:46:00 +0000
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 23 Sep 2025 15:30:00 +0000
