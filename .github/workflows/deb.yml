@@ -33,17 +33,20 @@ jobs:
       - name: Build package
         run: |
           dpkg-buildpackage -us -uc
+          mkdir -p artifacts
+          find .. -maxdepth 1 -type f \( -name '*.deb' -o -name '*.dsc' -o -name '*.changes' -o -name '*.buildinfo' -o -name '*.tar.*' \) -exec mv {} artifacts/ \;
+          ls -l artifacts
 
       - name: Upload .deb artifacts
         uses: actions/upload-artifact@v4
         with:
           name: debs
-          path: ../*.deb
+          path: artifacts/*.deb
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ../*.deb
+          files: artifacts/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
