@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # necessário para criar/atualizar Releases
+  contents: write
 
 jobs:
   build-deb:
@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # garante acesso às tags
+          fetch-depth: 0
 
       - name: Install build tooling
         run: |
