@@ -1,0 +1,49 @@
+name: Build .deb
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write  # necessário para criar/atualizar Releases
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # garante acesso às tags
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential debhelper devscripts fakeroot
+
+      - name: Symlink debian directory
+        run: |
+          if [ ! -e debian ]; then
+            ln -s host-agent/pkg/debian debian
+          fi
+          ls -l debian
+
+      - name: Build package
+        run: |
+          dpkg-buildpackage -us -uc
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debs
+          path: ../*.deb
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ../*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
