@@ -1,0 +1,2 @@
+var/log/firecracker
+var/run/firecracker

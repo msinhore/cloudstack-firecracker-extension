@@ -1,0 +1,17 @@
+[Unit]
+Description=Gracefully stop Firecracker microVMs via agent API before system shutdown
+DefaultDependencies=no
+Before=firecracker-cloudstack-agent.service halt.target poweroff.target reboot.target shutdown.target
+After=network-online.target firecracker-cloudstack-agent.service
+# Runs while the agent is still up so we can use its API.
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/lib/firecracker-cloudstack-agent/tools/fc_graceful_shutdown.py
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=halt.target poweroff.target reboot.target shutdown.target

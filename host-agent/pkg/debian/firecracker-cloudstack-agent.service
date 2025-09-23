@@ -1,0 +1,23 @@
+[Unit]
+Description=Firecracker CloudStack Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/firecracker-cloudstack-agent
+Environment=PYTHONPATH=/usr/lib/firecracker-cloudstack-agent:/usr/lib/firecracker-cloudstack-agent/vendor:$PYTHONPATH
+Environment=FC_AGENT_CONFIG=/etc/cloudstack/firecracker-agent.json
+Environment=FC_AGENT_DEBUG=0
+ExecStart=/usr/bin/python3 -m uvicorn firecracker-agent:app --host 0.0.0.0 --port 8080
+User=root
+Group=root
+Restart=on-failure
+RestartSec=3
+# KillMode=process keeps systemctl stop/restart from tearing down microVM PIDs
+# or tmux sessions; only the agent's process tree is stopped so running guests
+# remain untouched until the operator explicitly manages them.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+{
+  "bind_host": "0.0.0.0",
+  "bind_port": 8080,
+  "debug": true,
+  "defaults": {
+    "host": {
+      "firecracker_bin": "/usr/local/bin/firecracker",
+      "kernel_dir": "/var/lib/firecracker/kernel",
+      "image_dir": "/var/lib/firecracker/images",
+      "conf_dir": "/var/lib/firecracker/conf",
+      "run_dir": "/var/run/firecracker",
+      "log_dir": "/var/log/firecracker",
+      "payload_dir": "/var/lib/firecracker/payload"
+    },
+    "net": {
+      "driver": "linux-bridge-vlan",
+      "host_bridge": "cloudbr1",
+      "uplink": "eth1"
+    },
+    "storage": {
+      "driver": "file",
+      "volume_dir": "/var/lib/firecracker/volumes"
+    }
+  }
+}
