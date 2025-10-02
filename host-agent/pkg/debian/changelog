@@ -1,0 +1,25 @@
+firecracker-cloudstack-agent (0.2.0-1) unstable; urgency=medium
+
+  * Major refactoring: Modularized codebase for better maintainability
+  * Separated orchestration layer into dedicated modules
+  * Created dedicated modules for configuration, state, and utilities
+  * Improved code organization with clear separation of concerns
+  * Enhanced API and CLI modules with better structure
+  * Updated package structure to reflect new modular architecture
+  * Improved code quality and PEP8 compliance
+  * Better error handling and validation
+  * Enhanced documentation and code comments
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 12 Sep 2024 16:46:00 +0000
+
+firecracker-cloudstack-agent (0.1.0-1) unstable; urgency=low
+
+  * Initial release of Firecracker CloudStack Agent
+  * FastAPI-based REST API for managing Firecracker microVMs
+  * Typer-based CLI interface
+  * Pluggable storage backends (file, LVM, LVM-thin)
+  * Network management with VLAN support
+  * Systemd integration
+  * CloudStack integration ready
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 12 Sep 2024 16:46:00 +0000

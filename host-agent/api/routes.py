@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+API routes module for Firecracker Agent.
+This module defines the FastAPI routes and registers them with the application.
+"""
+from typing import Any, Dict, Optional
+
+from fastapi import FastAPI
+
+from models import SpecRequest
+from .handlers import APIHandlers
+
+
+def register_routes(app: FastAPI, agent_defaults: Dict[str, Any]) -> None:
+    """Register all API routes with the FastAPI application."""
+    handlers = APIHandlers(agent_defaults)
+
+    # Health and info endpoints
+    @app.get("/healthz")
+    def healthz():
+        return handlers.healthz()
+
+    @app.get("/v1")
+    def v1_index():
+        return handlers.v1_index()
+
+    @app.get("/v1/version")
+    def v1_version():
+        return handlers.v1_version()
+
+    @app.get("/v1/health")
+    def v1_health_alias():
+        return handlers.v1_health_alias()
+
+    @app.get("/v1/config/effective")
+    def v1_config_effective():
+        return handlers.v1_config_effective()
+
+    # VM management endpoints
+    @app.post("/v1/vms", status_code=201)
+    def create_vm(req: SpecRequest):
+        return handlers.api_create(req)
+
+    @app.get("/v1/vms")
+    def v1_list_vms():
+        return handlers.v1_list_vms()
+
+    @app.get("/v1/vms/{vm_name}/status")
+    def v1_vm_status_by_name(vm_name: str):
+        return handlers.v1_vm_status_by_name(vm_name)
+
+    @app.post("/v1/vms/{vm_name}/stop")
+    def v1_vm_stop_by_name(vm_name: str):
+        return handlers.v1_vm_stop_by_name(vm_name)
+
+    @app.post("/v1/vms/{vm_name}/start")
+    def v1_vm_start_by_name(vm_name: str, req: SpecRequest):
+        return handlers.v1_vm_start_by_name(vm_name, req)
+
+    @app.delete("/v1/vms/{vm_name}")
+    def v1_vm_delete_by_name(vm_name: str):
+        return handlers.v1_vm_delete_by_name(vm_name)
+
+    @app.post("/v1/vms/{vm_name}/reboot")
+    def v1_vm_reboot_by_name(vm_name: str):
+        return handlers.v1_vm_reboot_by_name(vm_name)
+
+    @app.post("/v1/vms/{vm_name}/recover")
+    def v1_vm_recover_by_name(vm_name: str, req: Optional[SpecRequest] = None):
+        return handlers.v1_vm_recover_by_name(vm_name, req)
+
+    # System management endpoints
+    @app.post("/v1/graceful-shutdown")
+    def v1_graceful_shutdown():
+        return handlers.v1_graceful_shutdown()
+
+    @app.post("/v1/save-states")
+    def v1_save_states():
+        return handlers.v1_save_states()
+
+    @app.get("/v1/saved-states")
+    def v1_get_saved_states():
+        return handlers.v1_get_saved_states()
+
+    @app.post("/v1/recover-all")
+    def v1_recover_all_vms():
+        return handlers.v1_recover_all_vms()
+
+    # Network configuration endpoints (retained for recovery tooling)
+    @app.get("/v1/network-config/{vm_name}")
+    def v1_get_network_config(vm_name: str):
+        return handlers.v1_get_network_config(vm_name)
+
+    @app.post("/v1/network-config/{vm_name}/apply")
+    def v1_apply_network_config(vm_name: str):
+        return handlers.v1_apply_network_config(vm_name)
+
+    @app.delete("/v1/network-config/{vm_name}")
+    def v1_delete_network_config(vm_name: str):
+        return handlers.v1_delete_network_config(vm_name)
