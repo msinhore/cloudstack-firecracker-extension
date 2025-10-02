@@ -26,7 +26,7 @@ jobs:
       - name: Symlink debian directory
         run: |
           if [ ! -e debian ]; then
-            ln -s host-agent/pkg/debian debian
+            ln -s host-agent/debian debian
           fi
           ls -l debian
 
