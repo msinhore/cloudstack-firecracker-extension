@@ -1,3 +1,12 @@
+firecracker-cloudstack-agent (0.1.0-2) unstable; urgency=medium
+
+  * Expose configurable payload_dir in host defaults and documentation.
+  * Persist incoming VM specs to the payload directory via the API.
+  * Ensure systemd service creates /var/lib/firecracker/payload before start.
+  * Validate firecracker binary path during VM startup and fail fast if missing.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Fri, 03 Oct 2025 16:40:00 +0000
+
 firecracker-cloudstack-agent (0.1.0-1) unstable; urgency=low
 
   * Initial release of Firecracker CloudStack Agent
