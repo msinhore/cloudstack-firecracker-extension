@@ -221,6 +221,7 @@ class CLICommands:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from VM details or use a default
         image_path = vm_details.get("image", "")

@@ -9,7 +9,8 @@
       "image_dir": "/var/lib/firecracker/images",
       "conf_dir": "/var/lib/firecracker/conf",
       "run_dir": "/var/run/firecracker",
-      "log_dir": "/var/log/firecracker"
+      "log_dir": "/var/log/firecracker",
+      "payload_dir": "/var/lib/firecracker/payload"
     },
     "net": {
       "driver": "linux-bridge-vlan",

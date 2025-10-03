@@ -31,6 +31,7 @@ class ConfigManager:
         - defaults.host.conf_dir (required)
         - defaults.host.run_dir (required)
         - defaults.host.log_dir (required)
+        - defaults.host.payload_dir (required)
         - defaults.storage.volume_dir (required if using file storage)
         On any parse/syntax error or missing required keys, the server will NOT start.
         """

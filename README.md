@@ -97,7 +97,7 @@ apt install -y \
 
 Create directories:
 ```bash
-mkdir -p /var/lib/firecracker/{images,kernel,conf,volumes}
+mkdir -p /var/lib/firecracker/{images,kernel,conf,volumes,payload}
 mkdir -p /var/log/firecracker /var/run/firecracker
 ```
 
@@ -142,6 +142,7 @@ ss -ltnp | grep 8080
       "conf_dir": "/var/lib/firecracker/conf",
       "run_dir": "/var/run/firecracker",
       "log_dir": "/var/log/firecracker",
+      "payload_dir": "/var/lib/firecracker/payload",
       "image_dir": "/var/lib/firecracker/images",
       "kernel_dir": "/var/lib/firecracker/kernel"
     },
@@ -295,4 +296,3 @@ dpkg-buildpackage -us -uc
 ```
 
 Generated packages land in the repo root (`../firecracker-cloudstack-agent_<ver>_<arch>.deb`). Install the package on each Firecracker host as described earlier.
-

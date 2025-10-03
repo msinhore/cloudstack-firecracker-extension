@@ -15,6 +15,7 @@ ExecStartPre=/usr/bin/mkdir -p /var/log/firecracker
 ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/config
 ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/run
 ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/volumes
+ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/payload
 ExecStart=/usr/bin/python3 -u /usr/local/bin/firecracker-agent.py
 ExecStop=/usr/local/bin/firecracker-agent-shutdown.sh
 Restart=always

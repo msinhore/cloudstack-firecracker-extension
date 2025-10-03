@@ -44,14 +44,14 @@ class APIHandlers:
             pass
         if not vm_name:
             vm_name = f"unknown-{int(time.time())}"
-        log_dir_path = self.agent_defaults.get("host", {}).get("log_dir")
-        if not log_dir_path:
-            logger.warning("log_dir not configured in agent defaults, skipping spec logging")
+        payload_dir_path = self.agent_defaults.get("host", {}).get("payload_dir")
+        if not payload_dir_path:
+            logger.warning("payload_dir not configured in agent defaults, skipping payload persistence")
         else:
-            log_dir = Path(log_dir_path)
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / f"create-spec-{vm_name}.json"
-            with log_file.open("w", encoding="utf-8") as f:
+            payload_dir = Path(payload_dir_path)
+            payload_dir.mkdir(parents=True, exist_ok=True)
+            payload_file = payload_dir / f"create-spec-{vm_name}.json"
+            with payload_file.open("w", encoding="utf-8") as f:
                 json.dump(raw_spec, f, indent=2)
         spec: Optional[Spec] = None  # type: ignore[assignment]
         paths_obj: Optional[Paths] = None
@@ -265,6 +265,7 @@ class APIHandlers:
                     conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
                     run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
                     log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+                    payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
                 )
                 vmext = VMExt(kernel="", boot_args="", mem_mib=512, image="")
                 storage_spec = StorageSpec(driver="file", volume_file=paths_obj.volume_file)
@@ -422,6 +423,7 @@ class APIHandlers:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from externaldetails.virtualmachine.image or use a default
         external_details = obj.get("externaldetails", {})
@@ -506,6 +508,7 @@ class APIHandlers:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from config or use a default
         image_path = cfg.get("drives", [{}])[0].get("path_on_host", "")

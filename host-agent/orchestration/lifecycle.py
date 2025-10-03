@@ -116,6 +116,7 @@ class VMLifecycle:
                                 conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
                                 run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
                                 log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+                                payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
                             ),
                             vmext=VMExt(kernel="", boot_args="", mem_mib=512, image=""),
                             storage=StorageSpec(driver="file", volume_file=paths.volume_file),
@@ -212,6 +213,7 @@ class VMLifecycle:
                 conf_dir=defaults.get("host", {}).get("conf_dir"),
                 run_dir=defaults.get("host", {}).get("run_dir"),
                 log_dir=defaults.get("host", {}).get("log_dir"),
+                payload_dir=defaults.get("host", {}).get("payload_dir"),
             )
             vmext = VMExt(kernel="", boot_args="", mem_mib=512, image="")
             storage_spec = StorageSpec(driver="file", volume_file=paths.volume_file)
@@ -257,6 +259,7 @@ class VMLifecycle:
             conf_dir=defaults.get("host", {}).get("conf_dir"),
             run_dir=defaults.get("host", {}).get("run_dir"),
             log_dir=defaults.get("host", {}).get("log_dir"),
+            payload_dir=defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from config or use a default
         image_path = cfg.get("drives", [{}])[0].get("path_on_host", "")
