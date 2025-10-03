@@ -55,12 +55,14 @@ class TmuxManager:
             raise RuntimeError(f"Failed to create tmux session: {e}") from e
 
     @staticmethod
-    def find_fc_pid(paths: Paths, firecracker_bin: str) -> Optional[int]:
+    def find_fc_pid(paths: Paths, firecracker_bin: Optional[str]) -> Optional[int]:
         """Best-effort discovery of the firecracker PID.
         Strategies:
         1) Match cmdline that contains both the firecracker binary and the API socket path.
         2) Look for a process that has the UNIX socket open (psutil.net_connections or open_files).
         """
+        if not firecracker_bin:
+            return None
         socket_path = str(paths.socket_file)
         # Strategy 1: Match cmdline
         try:

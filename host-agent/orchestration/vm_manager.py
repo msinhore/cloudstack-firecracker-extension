@@ -6,8 +6,10 @@ This module handles VM lifecycle operations (start, stop, status, delete, reboot
 """
 import json
 import logging
+import os
 import shlex
 import time
+from pathlib import Path
 
 import psutil
 from libtmux import Server as TmuxServer
@@ -31,6 +33,14 @@ class VMManager:
     def start_vm(self, spec: Spec, paths: Paths, timeout: int = 30) -> None:
         """Start Firecracker inside a detached tmux session and wait for API readiness."""
         validate_name("VM", spec.vm.name)
+        firecracker_bin = (spec.host.firecracker_bin or "").strip()
+        if not firecracker_bin:
+            raise FileNotFoundError("Firecracker binary path not configured (defaults.host.firecracker_bin)")
+        bin_path = Path(firecracker_bin)
+        if not bin_path.is_file():
+            raise FileNotFoundError(f"Firecracker binary not found at '{firecracker_bin}'")
+        if not os.access(bin_path, os.X_OK):
+            raise PermissionError(f"Firecracker binary is not executable: '{firecracker_bin}'")
         # ensure directories
         ensure_dirs(paths)
         # remove any stale socket; prepare log file
