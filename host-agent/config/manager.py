@@ -63,6 +63,11 @@ class ConfigManager:
                     # Load defaults section from config file
                     if "defaults" in file_cfg and isinstance(file_cfg["defaults"], dict):
                         cfg["defaults"] = file_cfg["defaults"]
+                    # Preserve optional top-level sections (security/auth/logging/etc.)
+                    for key, value in file_cfg.items():
+                        if key in {"bind_host", "bind_port", "defaults"}:
+                            continue
+                        cfg[key] = value
         except Exception:
             # Any unexpected error while reading the config file is fatal
             raise

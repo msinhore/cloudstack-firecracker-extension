@@ -20,5 +20,18 @@
       "driver": "linux-bridge-vlan",
       "host_bridge": "cloudbr1"
     }
+  },
+  "security": {
+    "tls": {
+      "enabled": false,
+      "cert_file": "/etc/cloudstack/tls-cert/server.crt",
+      "key_file": "/etc/cloudstack/tls-cert/server.key",
+      "ca_file": "/etc/cloudstack/tls-cert/ca.crt",
+      "client_auth": "none"
+    }
+  },
+  "auth": {
+    "enabled": false,
+    "service": "firecracker-agent"
   }
 }

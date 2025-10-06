@@ -6,3 +6,4 @@ var/lib/firecracker/kernel
 var/lib/firecracker/conf
 var/lib/firecracker/volumes
 var/lib/firecracker/payload
+etc/cloudstack/tls-cert

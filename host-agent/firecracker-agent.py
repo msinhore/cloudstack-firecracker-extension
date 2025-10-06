@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import ssl
 from pathlib import Path
 from typing import Any, Dict
 
@@ -35,6 +36,7 @@ from cli import CLICommands
 # Import modular components
 from config import ConfigManager
 from orchestration import VMLifecycle
+from utils.auth import PamError, build_auth_dependency
 from utils.filesystem import set_agent_defaults
 
 # Global variables
@@ -50,6 +52,8 @@ READY_POLICY = os.environ.get("FC_AGENT_READY_POLICY", "pid").strip().lower() or
 # Global configuration
 AGENT_DEFAULTS: Dict[str, Any] = {}
 AGENT_CFG: Dict[str, Any] = {}
+AUTH_DEPENDENCY = None
+TLS_OPTIONS: Dict[str, Any] = {}
 IS_API_MODE = True
 # Initialize FastAPI app
 app = FastAPI(title="Firecracker Agent", version="1.0.0")
@@ -76,6 +80,63 @@ def _apply_logging_from_cfg(cfg: Dict[str, Any]) -> None:
         _DEF_HANDLER_SET = True
 
 
+def _build_tls_options(security_cfg: Any) -> Dict[str, Any]:
+    """Translate security configuration into uvicorn TLS parameters."""
+    if not security_cfg or not isinstance(security_cfg, dict):
+        logger.info("TLS disabled: no security section configured")
+        return {}
+    tls_cfg = security_cfg.get("tls") if isinstance(security_cfg.get("tls"), dict) else security_cfg
+    if tls_cfg.get("enabled") is False:
+        logger.info("TLS disabled via configuration")
+        return {}
+    cert_file = tls_cfg.get("cert_file")
+    key_file = tls_cfg.get("key_file")
+    if not cert_file or not key_file:
+        raise RuntimeError("TLS enabled but cert_file/key_file not configured")
+    for label, path in [
+        ("cert_file", cert_file),
+        ("key_file", key_file),
+        ("ca_file", tls_cfg.get("ca_file")),
+    ]:
+        if path:
+            resolved = Path(path)
+            if not resolved.exists():
+                raise RuntimeError(f"TLS {label} not found at {path}")
+    client_auth = str(tls_cfg.get("client_auth", "none")).strip().lower()
+    ssl_req_map = {
+        "none": ssl.CERT_NONE,
+        "optional": ssl.CERT_OPTIONAL,
+        "required": ssl.CERT_REQUIRED,
+    }
+    if client_auth not in ssl_req_map:
+        raise RuntimeError(f"Invalid client_auth value '{client_auth}' in TLS configuration")
+    options: Dict[str, Any] = {
+        "ssl_certfile": cert_file,
+        "ssl_keyfile": key_file,
+        "ssl_cert_reqs": ssl_req_map[client_auth],
+    }
+    ca_file = tls_cfg.get("ca_file")
+    if ca_file:
+        options["ssl_ca_certs"] = ca_file
+    logger.info(
+        "TLS enabled (%s), client auth: %s",
+        "mTLS" if client_auth in {"optional", "required"} else "server-only",
+        client_auth,
+    )
+    return options
+
+
+def _configure_auth_dependency(auth_cfg: Any):
+    """Configure optional authentication dependency."""
+    if not auth_cfg or not isinstance(auth_cfg, dict):
+        logger.info("Authentication disabled: no auth section configured")
+        return None
+    try:
+        return build_auth_dependency(auth_cfg)
+    except PamError as exc:
+        raise RuntimeError(f"Authentication configuration error: {exc}") from exc
+
+
 def root_ok() -> Dict[str, Any]:
     """Root endpoint handler."""
     return {"status": "ok", "message": "Firecracker Agent is running", "version": "1.0.0"}
@@ -90,7 +151,7 @@ def v1_config_effective() -> Dict[str, Any]:
 @app.on_event("startup")
 async def startup_event():
     """Initialize agent on startup."""
-    global AGENT_DEFAULTS, AGENT_CFG
+    global AGENT_DEFAULTS, AGENT_CFG, AUTH_DEPENDENCY
     logger.info("Starting Firecracker Agent...")
     # Load configuration
     config_manager = ConfigManager({})
@@ -98,16 +159,18 @@ async def startup_event():
     AGENT_DEFAULTS = AGENT_CFG.get("defaults", {})
     config_manager.agent_defaults = AGENT_DEFAULTS
     set_agent_defaults(AGENT_DEFAULTS)
-    
+
     logger.info("Configuration loaded successfully")
     logger.info("AGENT_CFG keys: %s", list(AGENT_CFG.keys()))
     logger.info("AGENT_DEFAULTS keys: %s", list(AGENT_DEFAULTS.keys()))
     logger.info("AGENT_DEFAULTS: %s", AGENT_DEFAULTS)
-    
+
     # Apply logging configuration
     _apply_logging_from_cfg(AGENT_CFG)
     # Register API routes with loaded configuration
-    register_routes(app, AGENT_DEFAULTS)
+    if AUTH_DEPENDENCY is None:
+        AUTH_DEPENDENCY = _configure_auth_dependency(AGENT_CFG.get("auth", {}))
+    register_routes(app, AGENT_DEFAULTS, AUTH_DEPENDENCY)
     # Initialize VM lifecycle for recovery
     vm_lifecycle = VMLifecycle(AGENT_DEFAULTS)
     vm_lifecycle.startup_vm_recovery()
@@ -257,13 +320,15 @@ def recover(spec_file: Path):
 
 def main():
     """Main entry point."""
-    global AGENT_CFG, AGENT_DEFAULTS
+    global AGENT_CFG, AGENT_DEFAULTS, AUTH_DEPENDENCY, TLS_OPTIONS
     # Load configuration first
     config_manager = ConfigManager({})
     AGENT_CFG = config_manager.load_agent_config()
     AGENT_DEFAULTS = AGENT_CFG.get("defaults", {})
     config_manager.agent_defaults = AGENT_DEFAULTS
     set_agent_defaults(AGENT_DEFAULTS)
+    AUTH_DEPENDENCY = _configure_auth_dependency(AGENT_CFG.get("auth", {}))
+    TLS_OPTIONS = _build_tls_options(AGENT_CFG.get("security", {}))
     # Run API by default; set FC_AGENT_MODE=cli to use the local CLI instead
     mode = os.environ.get("FC_AGENT_MODE", "api").lower()
     if mode == "cli":
@@ -271,7 +336,7 @@ def main():
     else:
         try:
             cfg = AGENT_CFG
-            uvicorn.run(app, host=cfg["bind_host"], port=cfg["bind_port"], reload=False)
+            uvicorn.run(app, host=cfg["bind_host"], port=cfg["bind_port"], reload=False, **TLS_OPTIONS)
         except ModuleNotFoundError:
             print(
                 "uvicorn is not installed. Install it or run CLI mode:"

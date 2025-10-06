@@ -1,0 +1,54 @@
+#!/bin/sh
+set -e
+
+CERT_DIR="/etc/cloudstack/tls-cert"
+SERVER_KEY="$CERT_DIR/server.key"
+SERVER_CRT="$CERT_DIR/server.crt"
+SERVER_CSR="$CERT_DIR/server.csr"
+CA_KEY="$CERT_DIR/ca.key"
+CA_CRT="$CERT_DIR/ca.crt"
+
+create_ca() {
+    umask 077
+    openssl req -x509 -nodes -batch -days 3650 \
+        -newkey rsa:4096 \
+        -keyout "$CA_KEY" \
+        -out "$CA_CRT" \
+        -subj "/CN=Firecracker Agent Local CA" >/dev/null 2>&1
+    chmod 600 "$CA_KEY"
+}
+
+create_server_cert() {
+    umask 077
+    CN=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo firecracker-agent.local)
+    openssl req -new -nodes -batch \
+        -newkey rsa:4096 \
+        -keyout "$SERVER_KEY" \
+        -out "$SERVER_CSR" \
+        -subj "/CN=$CN" >/dev/null 2>&1
+    chmod 600 "$SERVER_KEY"
+    openssl x509 -req -in "$SERVER_CSR" \
+        -CA "$CA_CRT" -CAkey "$CA_KEY" -CAcreateserial \
+        -out "$SERVER_CRT" -days 825 -sha256 >/dev/null 2>&1
+    rm -f "$SERVER_CSR"
+    chmod 644 "$SERVER_CRT"
+}
+
+case "$1" in
+    configure)
+        umask 027
+        install -d -m 0750 "$CERT_DIR"
+        if [ ! -f "$CA_KEY" ] || [ ! -f "$CA_CRT" ]; then
+            create_ca
+        fi
+        if [ ! -f "$SERVER_KEY" ] || [ ! -f "$SERVER_CRT" ]; then
+            create_server_cert
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        ;;
+esac
+
+exit 0

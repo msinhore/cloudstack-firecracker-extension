@@ -20,6 +20,7 @@ host-agent/orchestration/__init__.py                usr/lib/firecracker-cloudsta
 host-agent/orchestration/vm_manager.py              usr/lib/firecracker-cloudstack-agent/orchestration/
 host-agent/orchestration/lifecycle.py               usr/lib/firecracker-cloudstack-agent/orchestration/
 host-agent/utils/__init__.py                        usr/lib/firecracker-cloudstack-agent/utils/
+host-agent/utils/auth.py                            usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/validation.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/filesystem.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/tmux.py                            usr/lib/firecracker-cloudstack-agent/utils/
