@@ -18,28 +18,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
 
 ---
 ## Host Installation (Debian/Ubuntu)
-1. **Prepare networking** – ensure a VLAN-aware bridge exists (example `cloudbr1` enslaving `eth1`). Systemd-networkd snippet:
-   ```ini
-   # /etc/systemd/network/10-cloudbr1.netdev
-   [NetDev]
-   Name=cloudbr1
-   Kind=bridge
-
-   [Bridge]
-   VLANFiltering=yes
-   DefaultPVID=0
-   MulticastSnooping=no
-
-   # /etc/systemd/network/20-eth1.network
-   [Match]
-   Name=eth1
-
-   [Network]
-   Bridge=cloudbr1
-   ```
-   Reload with `systemctl restart systemd-networkd` and confirm `bridge vlan show`.
-
-2. **Install Firecracker** – place the binary at `/usr/local/bin/firecracker`:
+1. **Install Firecracker** – place the binary at `/usr/local/bin/firecracker`:
    ```bash
    FC_VERSION=1.13.1
    ARCH=$(uname -m)
@@ -48,7 +27,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
    sudo install -m 0755 firecracker-v${FC_VERSION}-${ARCH}/firecracker /usr/local/bin/firecracker
    ```
 
-3. **Install the agent package**:
+2. **Install the agent package**:
    ```bash
    sudo apt install -y ./firecracker-cloudstack-agent_<version>_all.deb
    ```
@@ -57,7 +36,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
    - generate `ca.crt`, `server.crt`, `server.key`
    - install `/etc/systemd/system/firecracker-cloudstack-agent.service`
 
-4. **Enable the service**:
+3. **Enable the service**:
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl enable --now firecracker-cloudstack-agent.service
@@ -70,7 +49,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
 
 ---
 ## Agent Configuration
-Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Example:
+Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Minimal example:
 ```json
 {
   "bind_host": "0.0.0.0",
@@ -84,14 +63,6 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Exa
       "run_dir": "/var/run/firecracker",
       "log_dir": "/var/log/firecracker",
       "payload_dir": "/var/lib/firecracker/payload"
-    },
-    "storage": {
-      "driver": "file",
-      "volume_dir": "/var/lib/firecracker/volumes"
-    },
-    "net": {
-      "driver": "linux-bridge-vlan",
-      "host_bridge": "cloudbr1"
     }
   },
   "security": {
@@ -112,8 +83,6 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Exa
 
 ### Key Sections
 - **`defaults.host`** – directories and Firecracker binary path. All paths must exist; the package seeds them in `/var/lib/firecracker`.
-- **`defaults.storage`** – choose `file`, `lvm`, or `lvmthin`. Additional keys (e.g., `vg_name`, `thinpool_name`) follow the examples under `host-agent/`.
-- **`defaults.net`** – select `linux-bridge-vlan` or `ovs-vlan`. Provide bridge name and optional uplink settings.
 - **`security.tls`**
   - `enabled`: turn HTTPS on/off.
   - `cert_file`/`key_file`: server certificate/key. Replace the auto-generated pair as needed.
@@ -123,36 +92,35 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Exa
   - `enabled`: when true, all `/v1/*` routes require HTTP Basic credentials.
   - `service`: name of the PAM stack (populate `/etc/pam.d/firecracker-agent`). The package depends on `python3-pamela`.
 
+### Storage Backends (`defaults.storage`)
+- `file` – simple sparse files under `volume_dir`. See `host-agent/firecracker-agent.json-file-example`.
+- `lvm` – logical volumes created in `vg`. Optional `size` sets the LV size when images lack metadata. See `host-agent/firecracker-agent.json-lvm-example`.
+- `lvmthin` – thin-provisioned volumes inside `vg`/`thinpool`. Optional `size` overrides the provisioned size. See `host-agent/firecracker-agent.json-lvmthin-example`.
+
+All storage drivers accept per-request overrides; values here act as defaults.
+
+### Network Backends (`defaults.net`)
+- `linux-bridge-vlan` – attaches tap devices to a Linux bridge and tags VLANs per request. Provide `host_bridge`; optional `uplink` pins the external interface instead of autodetection. See `host-agent/firecracker-agent.json-file-example`.
+- `ovs-vlan` – programs Open vSwitch for VLAN tagging. Provide `host_bridge` (integration bridge) and `uplink`; OVS Python bindings must be installed on the host. See `host-agent/firecracker-agent.json-ovs-example`.
+
 After edits, restart the service:
 ```bash
 sudo systemctl restart firecracker-cloudstack-agent.service
 ```
 
----
-## VM Assets (Kernel & RootFS)
-- **Kernel** – Firecracker requires an uncompressed `vmlinux`. Quick extraction:
-  ```bash
-  sudo apt install -y binutils zstd linux-image-$(uname -r)
-  sudo curl -fSL https://raw.githubusercontent.com/torvalds/linux/master/scripts/extract-vmlinux \
-    -o /usr/local/bin/extract-vmlinux
-  sudo chmod +x /usr/local/bin/extract-vmlinux
-  sudo mkdir -p /var/lib/firecracker/kernel
-  sudo /usr/local/bin/extract-vmlinux /boot/vmlinuz-$(uname -r) \
-    | sudo tee /var/lib/firecracker/kernel/vmlinux-$(uname -r).bin >/dev/null
-  ```
-- **Root filesystem** – build an ext4 image from Alpine Mini RootFS:
-  ```bash
-  wget https://dl-cdn.alpinelinux.org/alpine/v3.22/releases/x86_64/alpine-minirootfs-3.22.1-x86_64.tar.gz
-  mkdir -p /tmp/alpine-rootfs
-  sudo tar -xzf alpine-minirootfs-3.22.1-x86_64.tar.gz -C /tmp/alpine-rootfs
-  sudo dd if=/dev/zero of=/var/lib/firecracker/images/alpine-3.22.1.ext4 bs=1M count=512
-  sudo mkfs.ext4 -F /var/lib/firecracker/images/alpine-3.22.1.ext4 -L rootfs
-  sudo mount -o loop /var/lib/firecracker/images/alpine-3.22.1.ext4 /mnt/fcroot
-  sudo rsync -aHAX /tmp/alpine-rootfs/ /mnt/fcroot/
-  sudo umount /mnt/fcroot
-  ```
-  Configure networking/SSH inside the chroot as needed (see `docs/` for full recipe). Typical boot args: `console=ttyS0 reboot=k panic=1 pci=off ip=dhcp`.
+### Host Filesystem Layout
+- `/var/log/firecracker` – rolling log files created per VM (`<vm>.log`) and agent runtime diagnostics.
+- `/var/run/firecracker` – transient sockets and PID files used while VMs are running (`<vm>.socket`, `<vm>.pid`).
+- `/var/lib/firecracker/images` – guest rootfs images made available to Firecracker (ext4/RAW, typically referenced by template `image`).
+- `/var/lib/firecracker/kernel` – uncompressed `vmlinux` kernels referenced by template `kernel`.
+- `/var/lib/firecracker/conf` – rendered Firecracker machine configuration JSON files (`<vm>.json`) persisted for troubleshooting.
+- `/var/lib/firecracker/volumes` – disk volumes created when the `file` storage backend is selected.
+- `/var/lib/firecracker/payload` – raw payloads uploaded by CloudStack (cloud-init data, ISO metadata, temporary artifacts).
 
+### Tmux Access
+- Each VM runs inside a detached tmux session named `fc-<vm_name>`; list active sessions with `tmux ls`.
+- Attach to the microVM console using `tmux attach -t fc-<vm_name>` and detach without stopping it via `Ctrl-b d`.
+- If a session is missing, the agent recreates it when the VM boots; use `tmux kill-session -t fc-<vm_name>` only for advanced troubleshooting.
 ---
 ## CloudStack Integration
 1. **Install extension on the management server**:
@@ -165,7 +133,11 @@ sudo systemctl restart firecracker-cloudstack-agent.service
    - Extension: name `Firecracker`, type `Orchestrator`, path `firecracker.py`.
    - Cluster: create External → Firecracker, associate hosts pointing to the HTTPS URL (`https://<host>:8443`).
    - Host config key/values: `url`, `port`, `username`, `password`, `skip_ssl_verification` (set to `false` if trusting the CA, `true` otherwise), plus optional `client_cert`/`client_key` when mTLS is enabled.
-3. **Templates** should reference kernel/image filenames stored on the agent and any custom `boot_args`.
+3. **Templates** – add Firecracker-specific template details:
+   - `kernel`: filename located under the agent's `defaults.host.kernel_dir` (for example `vmlinux-6.1.bin`).
+   - `image`: filename stored in `defaults.host.image_dir` (for example `alpine-3.22.ext4`).
+   - `boot_args`: optional kernel command line, e.g. `console=ttyS0 reboot=k panic=1 pci=off ip=dhcp`.
+   Provide filenames only; the agent resolves them against its configured directories on each host.
 
 ---
 ## Troubleshooting

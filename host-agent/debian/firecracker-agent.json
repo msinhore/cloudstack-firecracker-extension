@@ -1,7 +1,6 @@
 {
   "bind_host": "0.0.0.0",
-  "bind_port": 8080,
-  "debug": false,
+  "bind_port": 8443,
   "defaults": {
     "host": {
       "firecracker_bin": "/usr/local/bin/firecracker",
@@ -23,7 +22,7 @@
   },
   "security": {
     "tls": {
-      "enabled": false,
+      "enabled": true,
       "cert_file": "/etc/cloudstack/tls-cert/server.crt",
       "key_file": "/etc/cloudstack/tls-cert/server.key",
       "ca_file": "/etc/cloudstack/tls-cert/ca.crt",
@@ -31,7 +30,7 @@
     }
   },
   "auth": {
-    "enabled": false,
+    "enabled": true,
     "service": "firecracker-agent"
   }
 }
