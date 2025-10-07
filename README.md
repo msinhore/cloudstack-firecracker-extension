@@ -17,7 +17,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
 - Persistent VM metadata for crash recovery and rebuild.
 
 ---
-## Host Installation (Debian/Ubuntu)
+## Host Installation (Ubuntu 24.04)
 1. **Install Firecracker** – place the binary at `/usr/local/bin/firecracker`:
    ```bash
    FC_VERSION=1.13.1
