@@ -35,18 +35,22 @@ remote agent connection details are read from `externaldetails.host`.
 - externaldetails.host.url      (required, e.g. http://10.0.0.1)
 - externaldetails.host.port     (default: 8000)
 
-The client does not send Authorization headers; the agent must be configured to
-allow unauthenticated access or enforce auth server-side without requiring a token
-from this client.
+The client supports optional HTTP Basic authentication (host_username/host_password)
+and can also attach a bearer token (host_token) when provided.
 
 Alternatively, the extension may receive pre-extracted (flattened) fields:
-- host_url, host_port
+- host_url, host_port, skip_ssl_verification
+- host_username, host_password
 - image_file, kernel_file, boot_args
 - vm_name, vm_cpus, vm_ram (bytes), vm_uuid
 - vm_vlans (comma-separated), vm_macs (comma-separated), vm_nics (comma-separated)
 
 These flattened keys are used for connectivity (host_url/host_port) and 
 name resolution (vm_name) but the full payload is forwarded to the agent as-is.
+When HTTPS is used, certificate verification is enabled by default; setting
+`skip_ssl_verification=true` bypasses it. If `host_username` and
+`host_password` (or their equivalents inside `externaldetails.host`) are
+provided, the client sends HTTP Basic credentials to the agent.
 """
 
 import json
@@ -54,8 +58,10 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any, Dict, Optional, Union
+
 import requests
-from typing import Any, Dict
+from requests.auth import HTTPBasicAuth
 
 # -------------------------- small helpers --------------------------
 def _ok(payload: Dict[str, Any]) -> None:
@@ -87,14 +93,56 @@ def _validate_name(entity: str, name: str) -> None:
             )
         )
 
+
+def _first_non_empty(*values: Any) -> Optional[Any]:
+    """Return the first value that is not None/empty string."""
+    for value in values:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        elif value is not None:
+            return value
+    return None
+
+
+def _is_truthy(value: Any) -> bool:
+    """Interpret common truthy representations."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _ensure_file(path: str, label: str) -> str:
+    """Ensure a filesystem path exists and return its absolute form."""
+    resolved = Path(path).expanduser()
+    if not resolved.exists():
+        _fail(f"{label} not found: {resolved}")
+    return str(resolved)
+
 # -------------------------- data models --------------------------
 class Agent(object):
     """HTTP agent endpoint and auth context (Python 3.6 compatible)."""
 
-    def __init__(self, base_url, token, timeout):
+    def __init__(
+        self,
+        base_url: str,
+        token: Optional[str],
+        timeout: int,
+        verify: Union[bool, str] = True,
+        auth: Optional[HTTPBasicAuth] = None,
+        cert: Optional[Union[str, tuple]] = None,
+    ) -> None:
         self.base_url = base_url
         self.token = token
         self.timeout = int(timeout or 30)
+        self.verify = verify
+        self.auth = auth
+        self.cert = cert
 
 class Ctx(object):
     """Execution context parsed from JSON + CLI timeout (Python 3.6 compatible)."""
@@ -129,6 +177,8 @@ def _to_ctx(config_path: str, timeout: int):
         _fail(f"Invalid host_port value: {port_val}")
 
     token = (data.get("host_token") or host.get("token") or host.get("agent_token") or None)
+    if isinstance(token, str):
+        token = token.strip() or None
 
     # If the provided URL already includes an explicit port, don't append another
     if "://" in url:
@@ -142,13 +192,97 @@ def _to_ctx(config_path: str, timeout: int):
 
     base_url = f"{url}/v1" if has_explicit_port else f"{url}:{port}/v1"
 
-    agent = Agent(base_url, token, int(timeout or 30))
+    username = _first_non_empty(
+        host.get("username"),
+        host.get("user"),
+        host.get("login"),
+        data.get("host_username"),
+        data.get("username"),
+    )
+    password = _first_non_empty(
+        host.get("password"),
+        host.get("pass"),
+        host.get("secret"),
+        data.get("host_password"),
+        data.get("password"),
+    )
+
+    if username and not isinstance(username, str):
+        username = str(username)
+    if password and not isinstance(password, str):
+        password = str(password)
+    if username and not password:
+        _fail("host_password is required when host_username is provided")
+    if password and not username:
+        _fail("host_username is required when host_password is provided")
+    auth = HTTPBasicAuth(username, password) if username and password else None
+
+    skip_candidates = (
+        data.get("skip_ssl_verification"),
+        data.get("host_skip_ssl_verification"),
+        host.get("skip_ssl_verification"),
+        host.get("skip_ssl_verify"),
+    )
+    skip_verify = False
+    for candidate in skip_candidates:
+        if candidate is None:
+            continue
+        skip_verify = _is_truthy(candidate)
+        break
+
+    ca_bundle = _first_non_empty(
+        data.get("ca_bundle"),
+        data.get("ca_cert"),
+        host.get("ca_bundle"),
+        host.get("ca_cert"),
+        host.get("ca_file"),
+    )
+    verify: Union[bool, str] = True
+    if skip_verify:
+        verify = False
+        try:
+            import urllib3
+            from urllib3.exceptions import InsecureRequestWarning
+
+            urllib3.disable_warnings(InsecureRequestWarning)
+        except Exception:
+            pass
+    elif isinstance(ca_bundle, str):
+        verify = _ensure_file(ca_bundle, "CA bundle")
+
+    client_cert = _first_non_empty(
+        host.get("client_cert"),
+        host.get("tls_client_cert"),
+        data.get("client_cert"),
+        data.get("tls_client_cert"),
+    )
+    client_key = _first_non_empty(
+        host.get("client_key"),
+        host.get("tls_client_key"),
+        data.get("client_key"),
+        data.get("tls_client_key"),
+    )
+    cert: Optional[Union[str, tuple]] = None
+    if isinstance(client_cert, str) and client_cert:
+        cert_path = _ensure_file(client_cert, "TLS client certificate")
+        if isinstance(client_key, str) and client_key:
+            key_path = _ensure_file(client_key, "TLS client key")
+            cert = (cert_path, key_path)
+        else:
+            cert = cert_path
+    elif isinstance(client_key, str) and client_key:
+        _fail("TLS client key provided but client certificate missing")
+
+    agent = Agent(base_url, token, int(timeout or 30), verify=verify, auth=auth, cert=cert)
     return Ctx(data, vm_name, agent)
 
 # -------------------------- HTTP helpers --------------------------
 def _headers(agent):
-    """Default headers. Token is intentionally ignored (no Authorization)."""
-    return {"Accept": "application/json"}
+    """Default headers with optional bearer token."""
+    headers = {"Accept": "application/json"}
+    if getattr(agent, "token", None):
+        headers["Authorization"] = f"Bearer {agent.token}"
+    return headers
 
 def _req(method, url, agent, json_body=None):
     """Perform an HTTP request with proper timeouts and map errors."""
@@ -159,6 +293,9 @@ def _req(method, url, agent, json_body=None):
             json=json_body,
             headers=_headers(agent),
             timeout=agent.timeout,
+            auth=getattr(agent, "auth", None),
+            verify=getattr(agent, "verify", True),
+            cert=getattr(agent, "cert", None),
         )
     except requests.exceptions.RequestException as e:
         _fail(f"HTTP error contacting agent: {e}")
@@ -243,6 +380,7 @@ def main():
         "reboot": op_reboot,
         "delete": op_delete,
         "status": op_status,
+        "state": op_status,
         "recover": op_recover,
     }
 

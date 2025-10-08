@@ -1,7 +1,6 @@
 {
   "bind_host": "0.0.0.0",
-  "bind_port": 8080,
-  "debug": true,
+  "bind_port": 8443,
   "defaults": {
     "host": {
       "firecracker_bin": "/usr/local/bin/firecracker",
@@ -20,5 +19,18 @@
       "driver": "linux-bridge-vlan",
       "host_bridge": "cloudbr1"
     }
+  },
+  "security": {
+    "tls": {
+      "enabled": true,
+      "cert_file": "/etc/cloudstack/tls-cert/server.crt",
+      "key_file": "/etc/cloudstack/tls-cert/server.key",
+      "ca_file": "/etc/cloudstack/tls-cert/ca.crt",
+      "client_auth": "none"
+    }
+  },
+  "auth": {
+    "enabled": true,
+    "service": "firecracker-agent"
   }
 }

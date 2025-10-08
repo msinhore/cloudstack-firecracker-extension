@@ -1,0 +1,4 @@
+#!/bin/sh
+export PYTHONPATH=/usr/lib/firecracker-cloudstack-agent:${PYTHONPATH}
+export FC_AGENT_MODE=
+exec /usr/bin/python3 /usr/lib/firecracker-cloudstack-agent/firecracker-agent.py "$@"

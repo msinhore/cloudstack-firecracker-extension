@@ -1,0 +1,21 @@
+[Unit]
+Description=Firecracker CloudStack Agent (FastAPI + Typer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/firecracker-cloudstack-agent
+Environment=PYTHONPATH=/usr/lib/firecracker-cloudstack-agent:$PYTHONPATH
+Environment=FC_AGENT_CONFIG=/etc/cloudstack/firecracker-agent.json
+Environment=FC_AGENT_MODE=api
+Environment=FC_AGENT_DEBUG=0
+ExecStart=/usr/bin/python3 /usr/lib/firecracker-cloudstack-agent/firecracker-agent.py
+User=root
+Group=root
+Restart=on-failure
+RestartSec=1
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

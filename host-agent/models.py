@@ -41,6 +41,7 @@ class HostDetails:
     conf_dir: str
     run_dir: str
     log_dir: str
+    payload_dir: str
 
 
 @dataclasses.dataclass
@@ -90,4 +91,3 @@ class SpecRequest(BaseModel):
     spec: Dict[str, Any]
     timeout: Optional[int] = 30
     ssh_public_key: Optional[str] = None
-

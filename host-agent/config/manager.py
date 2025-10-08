@@ -8,13 +8,11 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from backend.networking import get_backend_by_driver as get_network_backend_by_driver
 from backend.storage import Paths, get_backend_by_driver
 from backend.networking.helpers import tap_name
-from models import HostDetails, NetSpec, NIC, Spec, StorageSpec, VMDetails, VMExt
-from utils.filesystem import paths_by_name
+from models import Spec
 
 logger = logging.getLogger("fc-agent")
 
@@ -33,6 +31,7 @@ class ConfigManager:
         - defaults.host.conf_dir (required)
         - defaults.host.run_dir (required)
         - defaults.host.log_dir (required)
+        - defaults.host.payload_dir (required)
         - defaults.storage.volume_dir (required if using file storage)
         On any parse/syntax error or missing required keys, the server will NOT start.
         """
@@ -64,6 +63,11 @@ class ConfigManager:
                     # Load defaults section from config file
                     if "defaults" in file_cfg and isinstance(file_cfg["defaults"], dict):
                         cfg["defaults"] = file_cfg["defaults"]
+                    # Preserve optional top-level sections (security/auth/logging/etc.)
+                    for key, value in file_cfg.items():
+                        if key in {"bind_host", "bind_port", "defaults"}:
+                            continue
+                        cfg[key] = value
         except Exception:
             # Any unexpected error while reading the config file is fatal
             raise
@@ -76,18 +80,7 @@ class ConfigManager:
             for key in ["host", "storage", "net"]:
                 if key not in cfg["defaults"] or not isinstance(cfg["defaults"][key], dict):
                     cfg["defaults"][key] = {}
-        # Provide a default payload directory for create-spec dumps so it can
-        # be referenced elsewhere even if the config file omits it.
-        host_defaults = cfg["defaults"].get("host", {})
-        if isinstance(host_defaults, dict) and "payload_dir" not in host_defaults:
-            host_defaults["payload_dir"] = "/var/lib/firecracker/payload"
         return cfg
-
-    def _payload_path(self, vm_name: str) -> Path:
-        """Return the expected payload JSON path for a VM."""
-        host_defaults = self.agent_defaults.get("host", {}) if isinstance(self.agent_defaults, dict) else {}
-        payload_dir = host_defaults.get("payload_dir") or "/var/lib/firecracker/payload"
-        return Path(payload_dir) / f"{vm_name}-payload.json"
 
     def write_config(self, spec: Spec, paths: Paths) -> None:
         """Render a full Firecracker JSON config on disk using values from `Spec`."""
@@ -180,20 +173,6 @@ class ConfigManager:
                 return None
             config_file = Path(run_dir_path) / f"network-config-{vm_name}.json"
             if not config_file.exists():
-                payload = self._load_payload(vm_name)
-                if payload:
-                    logger.info(
-                        "No persisted network config for VM %s, reconstructing from payload",
-                        vm_name,
-                    )
-                    net_defaults = self.agent_defaults.get("net", {}) if isinstance(self.agent_defaults, dict) else {}
-                    return {
-                        "vm_name": vm_name,
-                        "driver": net_defaults.get("driver", "linux-bridge-vlan"),
-                        "bridge": net_defaults.get("host_bridge", ""),
-                        "uplink": net_defaults.get("uplink", ""),
-                        "nics": self._nics_from_payload(payload),
-                    }
                 return None
             with config_file.open("r", encoding="utf-8") as f:
                 network_config = json.load(f)
@@ -217,31 +196,12 @@ class ConfigManager:
         except Exception as e:
             logger.error("Failed to cleanup network config for VM %s: %s", vm_name, e)
 
-    def cleanup_payload(self, vm_name: str) -> None:
-        """Remove the stored create payload for the VM (idempotent)."""
-        try:
-            payload_path = self._payload_path(vm_name)
-            if payload_path.exists():
-                payload_path.unlink()
-                logger.info("Removed payload file for VM: %s", vm_name)
-            # Legacy fallback: older agents stored payloads under log_dir with
-            # the create-spec prefix. Clean them up to avoid stale files.
-            host_defaults = self.agent_defaults.get("host", {}) if isinstance(self.agent_defaults, dict) else {}
-            legacy_dir = host_defaults.get("log_dir")
-            if legacy_dir:
-                legacy_path = Path(legacy_dir) / f"create-spec-{vm_name}.json"
-                if legacy_path.exists():
-                    legacy_path.unlink()
-        except Exception as e:
-            logger.warning("Failed to cleanup payload for VM %s: %s", vm_name, e)
-
     def build_network_config_from_spec(self, spec: Spec) -> Dict[str, Any]:
         """Build network configuration from VM spec for persistence."""
         network_config = {
             "vm_name": spec.vm.name,
             "driver": spec.net.driver,
             "bridge": spec.net.bridge,
-            "uplink": getattr(spec.net, "uplink", ""),
             "nics": [],
         }
         for nic in spec.vm.nics:
@@ -253,253 +213,15 @@ class ConfigManager:
                     "netmask": nic.netmask,
                     "gateway": nic.gateway,
                     "vlan": nic.vlan,
-                    "broadcastUri": nic.broadcastUri,
                 }
             )
         return network_config
 
-    def apply_network_config_from_saved(
-        self,
-        vm_name: str,
-        network_config: Optional[Dict[str, Any]] = None,
-        fallback_spec: Optional[Spec] = None,
-    ) -> bool:
-        """Apply saved network configuration to running VM.
-
-        The logic rebuilds a minimal Spec using the persisted network snapshot
-        and the original CloudStack payload (if available), then re-runs the
-        networking backend's ``prepare`` routine so TAPs and VLANs are ready
-        before the VM is started.
-        """
+    def apply_network_config_from_saved(self, vm_name: str, network_config: Dict[str, Any]) -> bool:
+        """Apply saved network configuration to running VM."""
         try:
-            net_cfg = network_config or self.load_network_config(vm_name)
-            spec = self._build_spec_for_network_recovery(vm_name, net_cfg, fallback_spec)
-            if not spec or not spec.vm.nics:
-                logger.warning("No NIC data available to recover networking for VM %s", vm_name)
-                return False
-            paths_obj = paths_by_name(vm_name)
-            backend = get_network_backend_by_driver(spec.net.driver, spec, paths_obj)
-            backend.prepare()
-            # Persist refreshed view so subsequent recoveries keep broadcastUri/VLAN data
-            try:
-                refreshed_cfg = self.build_network_config_from_spec(spec)
-                self.save_network_config(vm_name, refreshed_cfg)
-            except Exception as exc:
-                logger.debug("Failed to refresh saved network config for VM %s: %s", vm_name, exc)
-            logger.info(
-                "Reapplied networking for VM %s using driver=%s bridge=%s uplink=%s",
-                vm_name,
-                spec.net.driver,
-                spec.net.host_bridge,
-                spec.net.uplink,
-            )
+            logger.info("Applying network config for VM %s: %s", vm_name, network_config)
             return True
         except Exception as e:
             logger.error("Failed to apply network config for VM %s: %s", vm_name, e)
             return False
-
-    # ------------------------------------------------------------------
-    # Internal helpers for reconstructing specs from persisted metadata
-    # ------------------------------------------------------------------
-
-    def _build_spec_for_network_recovery(
-        self,
-        vm_name: str,
-        network_config: Optional[Dict[str, Any]],
-        fallback_spec: Optional[Spec] = None,
-    ) -> Optional[Spec]:
-        payload = self._load_payload(vm_name)
-        payload_nics = self._nics_from_payload(payload)
-        fallback_nics = self._nics_from_spec(fallback_spec) if fallback_spec else []
-
-        net_defaults = self.agent_defaults.get("net", {}) if isinstance(self.agent_defaults, dict) else {}
-        host_defaults = self.agent_defaults.get("host", {}) if isinstance(self.agent_defaults, dict) else {}
-
-        driver = (network_config or {}).get("driver") or net_defaults.get("driver") or "linux-bridge-vlan"
-        bridge = (network_config or {}).get("bridge") or net_defaults.get("host_bridge", "")
-        uplink = (network_config or {}).get("uplink") or net_defaults.get("uplink", "")
-        if fallback_spec:
-            driver = getattr(fallback_spec.net, "driver", driver) or driver
-            bridge = getattr(fallback_spec.net, "host_bridge", bridge) or getattr(fallback_spec.net, "bridge", bridge) or bridge
-            uplink = getattr(fallback_spec.net, "uplink", uplink) or uplink
-
-        saved_nics = (network_config or {}).get("nics") or []
-        if not saved_nics:
-            saved_nics = payload_nics or fallback_nics
-
-        merged_nics: List[NIC] = []
-        payload_by_mac = {nic.get("mac"): nic for nic in payload_nics if nic.get("mac")}
-        payload_by_id = {nic.get("device_id", idx): nic for idx, nic in enumerate(payload_nics)}
-        fallback_by_mac = {nic.get("mac"): nic for nic in fallback_nics if nic.get("mac")}
-        fallback_by_id = {nic.get("device_id", idx): nic for idx, nic in enumerate(fallback_nics)}
-
-        for idx, nic_entry in enumerate(saved_nics):
-            device_id = self._safe_int(nic_entry.get("device_id"), idx)
-            mac = str(nic_entry.get("mac", "") or "")
-            base = (
-                payload_by_mac.get(mac)
-                or payload_by_id.get(device_id)
-                or fallback_by_mac.get(mac)
-                or fallback_by_id.get(device_id)
-                or {}
-            )
-
-            vlan = nic_entry.get("vlan")
-            if vlan is None:
-                vlan = self._safe_int(base.get("vlan"), None)
-
-            broadcast_uri = nic_entry.get("broadcastUri") or base.get("broadcastUri")
-            if not broadcast_uri and vlan is not None:
-                broadcast_uri = f"vlan://{vlan}"
-            if vlan is None and isinstance(broadcast_uri, str) and broadcast_uri.startswith("vlan://"):
-                vlan = self._safe_int(broadcast_uri.split("vlan://", 1)[1], None)
-
-            ip = nic_entry.get("ip") or base.get("ip") or ""
-            netmask = nic_entry.get("netmask") or base.get("netmask") or ""
-            gateway = nic_entry.get("gateway") or base.get("gateway") or ""
-
-            merged_nics.append(
-                NIC(
-                    deviceId=device_id,
-                    mac=mac,
-                    ip=str(ip or ""),
-                    netmask=str(netmask or ""),
-                    gateway=str(gateway or ""),
-                    vlan=vlan if vlan is None or isinstance(vlan, int) else self._safe_int(vlan, None),
-                    broadcastUri=broadcast_uri if isinstance(broadcast_uri, str) else None,
-                )
-            )
-
-        merged_nics.sort(key=lambda nic: nic.deviceId)
-
-        if not merged_nics:
-            return None
-
-        payload_vm = payload.get("cloudstack.vm.details", {}) if isinstance(payload, dict) else {}
-
-        fallback_vm = getattr(fallback_spec, "vm", None)
-        cpus = (
-            self._safe_int((network_config or {}).get("cpus"))
-            or (fallback_vm.cpus if fallback_vm and getattr(fallback_vm, "cpus", None) else None)
-            or self._safe_int(payload_vm.get("cpu"), 1)
-            or 1
-        )
-        memory_mib = (
-            self._safe_int(payload_vm.get("memory"), None)
-            or (fallback_vm.minRam // (1024 * 1024) if fallback_vm and getattr(fallback_vm, "minRam", 0) else None)
-            or 512
-        )
-        vm_details = VMDetails(
-            name=vm_name,
-            cpus=cpus,
-            minRam=memory_mib * 1024 * 1024,
-            nics=merged_nics,
-        )
-
-        host_details = HostDetails(
-            firecracker_bin=str(host_defaults.get("firecracker_bin") or ""),
-            conf_dir=str(host_defaults.get("conf_dir") or ""),
-            run_dir=str(host_defaults.get("run_dir") or ""),
-            log_dir=str(host_defaults.get("log_dir") or ""),
-        )
-
-        paths_obj = paths_by_name(vm_name)
-
-        storage_driver = getattr(getattr(fallback_spec, "storage", None), "driver", None) or "file"
-        storage_volume = getattr(getattr(fallback_spec, "storage", None), "volume_file", None) or paths_obj.volume_file
-        storage_spec = StorageSpec(driver=storage_driver, volume_file=storage_volume)
-
-        payload_vmext = (payload.get("externaldetails", {}) if isinstance(payload, dict) else {}).get("virtualmachine", {})
-        kernel_path = payload_vmext.get("kernel") or payload_vmext.get("kernel_image_path") or ""
-        image_path = payload_vmext.get("image") or str(paths_obj.volume_file)
-        boot_args = payload_vmext.get("boot_args", "")
-
-        vm_ext = VMExt(
-            kernel=str(kernel_path or ""),
-            boot_args=str(boot_args or ""),
-            mem_mib=memory_mib,
-            image=str(image_path or paths_obj.volume_file),
-        )
-
-        net_spec = NetSpec(
-            driver=driver,
-            bridge=bridge,
-            nics=merged_nics,
-            host_bridge=bridge,
-            uplink=uplink,
-        )
-
-        return Spec(vm=vm_details, host=host_details, vmext=vm_ext, storage=storage_spec, net=net_spec)
-
-    def _load_payload(self, vm_name: str) -> Optional[Dict[str, Any]]:
-        try:
-            payload_path = self._payload_path(vm_name)
-            if payload_path.exists():
-                with payload_path.open("r", encoding="utf-8") as fh:
-                    return json.load(fh)
-            # Legacy fallback for older installations
-            host_defaults = self.agent_defaults.get("host", {}) if isinstance(self.agent_defaults, dict) else {}
-            legacy_dir = host_defaults.get("log_dir")
-            if legacy_dir:
-                legacy_path = Path(legacy_dir) / f"create-spec-{vm_name}.json"
-                if legacy_path.exists():
-                    with legacy_path.open("r", encoding="utf-8") as fh:
-                        return json.load(fh)
-        except Exception as exc:
-            logger.debug("Failed to read payload for VM %s: %s", vm_name, exc)
-        return None
-
-    def _nics_from_payload(self, payload: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not isinstance(payload, dict):
-            return []
-        vm_details = payload.get("cloudstack.vm.details", {}) or {}
-        raw_nics = vm_details.get("nics", []) or []
-        result: List[Dict[str, Any]] = []
-        for idx, nic in enumerate(raw_nics):
-            if not isinstance(nic, dict):
-                continue
-            broadcast_uri = nic.get("broadcastUri")
-            vlan = None
-            if isinstance(broadcast_uri, str) and broadcast_uri.startswith("vlan://"):
-                vlan = self._safe_int(broadcast_uri.split("vlan://", 1)[1], None)
-            result.append(
-                {
-                    "device_id": self._safe_int(nic.get("deviceId"), idx),
-                    "mac": nic.get("mac", ""),
-                    "ip": nic.get("ip", ""),
-                    "netmask": nic.get("netmask", ""),
-                    "gateway": nic.get("gateway", ""),
-                    "vlan": vlan,
-                    "broadcastUri": broadcast_uri,
-                }
-            )
-        return result
-
-    def _nics_from_spec(self, spec: Spec) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
-        if not spec:
-            return result
-        for nic in getattr(spec.vm, "nics", []) or []:
-            if not isinstance(nic, NIC):
-                continue
-            result.append(
-                {
-                    "device_id": nic.deviceId,
-                    "mac": nic.mac,
-                    "ip": nic.ip,
-                    "netmask": nic.netmask,
-                    "gateway": nic.gateway,
-                    "vlan": nic.vlan,
-                    "broadcastUri": nic.broadcastUri,
-                }
-            )
-        return result
-
-    @staticmethod
-    def _safe_int(value: Any, default: Optional[int] = 0) -> Optional[int]:
-        try:
-            if value is None:
-                return default
-            return int(value)
-        except (TypeError, ValueError):
-            return default

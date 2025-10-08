@@ -16,7 +16,7 @@
       "volume_dir": "/var/lib/firecracker/volumes"
     },
     "net": {
-      "driver": "ovs-vlan",
+      "driver": "linux-bridge-vlan",
       "host_bridge": "cloudbr1"
     }
   },

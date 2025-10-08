@@ -127,9 +127,8 @@ class CLICommands:
             self.vm_manager.delete_vm(spec, paths_obj)
             try:
                 self.config_manager.cleanup_network_config(spec.vm.name)
-                self.config_manager.cleanup_payload(spec.vm.name)
             except Exception as exc:
-                logger.warning("Unable to cleanup artifacts for %s: %s", spec.vm.name, exc)
+                logger.warning("Unable to cleanup network config for %s: %s", spec.vm.name, exc)
             succeed({"status": "success", "message": f"VM {spec.vm.name} deleted"}, is_api_mode=False)
         except Exception as e:
             fail(f"VM delete failed: {e}", is_api_mode=False)
@@ -222,6 +221,7 @@ class CLICommands:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from VM details or use a default
         image_path = vm_details.get("image", "")

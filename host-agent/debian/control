@@ -1,0 +1,28 @@
+Source: firecracker-cloudstack-agent
+Section: admin
+Priority: optional
+Maintainer: CHANGE ME <you@example.com>
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Build-Depends: debhelper-compat (= 13)
+
+Package: firecracker-cloudstack-agent
+Architecture: all
+Depends: ${misc:Depends}, jq, curl, iproute2, bridge-utils, tmux, openssl, python3-pamela, python3-uvicorn, python3-psutil, python3-fastapi, python3-libtmux, python3-pyroute2, python3-typer, python3-openvswitch, python3-ovsdbapp
+Recommends: openvswitch-switch
+Description: Firecracker agent with pluggable storage and networking backends for CloudStack
+ A local HTTP API/CLI to manage Firecracker microVMs with file/LVM/LVM-thin storage backends
+ and Linux bridge VLAN and Open vSwitch networking backends.
+ This agent provides a FastAPI-based REST API and Typer-based CLI for managing
+ Firecracker microVMs with support for multiple storage backends including file-based
+ cloning, LVM logical volumes, and LVM thin provisioning, plus networking backends
+ for Linux bridge and Open vSwitch with VLAN support.
+ .
+ Features:
+  - REST API with FastAPI framework
+  - CLI interface with Typer
+  - Pluggable storage backends (file, LVM, LVM-thin)
+  - Pluggable networking backends (Linux bridge VLAN, Open vSwitch VLAN)
+  - Network management with VLAN support
+  - Systemd integration
+  - CloudStack integration ready

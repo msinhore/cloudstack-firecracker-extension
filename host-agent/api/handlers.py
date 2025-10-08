@@ -44,23 +44,15 @@ class APIHandlers:
             pass
         if not vm_name:
             vm_name = f"unknown-{int(time.time())}"
-        payload_dir_path = (
-            self.agent_defaults.get("host", {}).get("payload_dir")
-            or "/var/lib/firecracker/payload"
-        )
-        try:
+        payload_dir_path = self.agent_defaults.get("host", {}).get("payload_dir")
+        if not payload_dir_path:
+            logger.warning("payload_dir not configured in agent defaults, skipping payload persistence")
+        else:
             payload_dir = Path(payload_dir_path)
             payload_dir.mkdir(parents=True, exist_ok=True)
-            payload_file = payload_dir / f"{vm_name}-payload.json"
+            payload_file = payload_dir / f"create-spec-{vm_name}.json"
             with payload_file.open("w", encoding="utf-8") as f:
                 json.dump(raw_spec, f, indent=2)
-        except Exception as exc:
-            logger.warning(
-                "Failed to persist create-spec payload for VM %s in %s: %s",
-                vm_name,
-                payload_dir_path,
-                exc,
-            )
         spec: Optional[Spec] = None  # type: ignore[assignment]
         paths_obj: Optional[Paths] = None
         vm_created = False
@@ -273,6 +265,7 @@ class APIHandlers:
                     conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
                     run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
                     log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+                    payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
                 )
                 vmext = VMExt(kernel="", boot_args="", mem_mib=512, image="")
                 storage_spec = StorageSpec(driver="file", volume_file=paths_obj.volume_file)
@@ -303,9 +296,8 @@ class APIHandlers:
             self.vm_manager.delete_vm(spec, paths_obj)
             try:
                 self.config_manager.cleanup_network_config(vm_name)
-                self.config_manager.cleanup_payload(vm_name)
             except Exception as exc:
-                logger.warning("Failed to cleanup artifacts for VM %s: %s", vm_name, exc)
+                logger.warning("Failed to cleanup network config for VM %s: %s", vm_name, exc)
             return {"status": "success", "message": f"VM {vm_name} deleted successfully", "vm_name": vm_name}
         except HTTPException:
             raise
@@ -341,19 +333,6 @@ class APIHandlers:
                 raise HTTPException(status_code=404, detail=f"VM {vm_name} not found")
             spec = self._cfg_to_spec(cfg, vm_name)
             paths_obj = paths_by_name(vm_name)
-            fallback_spec: Optional[Spec] = None
-            if req and getattr(req, "spec", None):
-                try:
-                    fallback_spec = self._to_spec(req.spec)
-                except Exception as exc:
-                    logger.debug("Failed to parse fallback spec for VM %s: %s", vm_name, exc)
-            network_ready = self.config_manager.apply_network_config_from_saved(vm_name, fallback_spec=fallback_spec)
-            if not network_ready:
-                try:
-                    target_spec = fallback_spec or spec
-                    self._net_prepare(target_spec, paths_obj)
-                except Exception as exc:
-                    logger.warning("Network preparation fallback failed for VM %s: %s", vm_name, exc)
             self.vm_manager.start_vm(spec, paths_obj)
             return {"status": "success", "message": f"VM {vm_name} started successfully", "vm_name": vm_name}
         except HTTPException:
@@ -444,6 +423,7 @@ class APIHandlers:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from externaldetails.virtualmachine.image or use a default
         external_details = obj.get("externaldetails", {})
@@ -528,6 +508,7 @@ class APIHandlers:
             conf_dir=self.agent_defaults.get("host", {}).get("conf_dir"),
             run_dir=self.agent_defaults.get("host", {}).get("run_dir"),
             log_dir=self.agent_defaults.get("host", {}).get("log_dir"),
+            payload_dir=self.agent_defaults.get("host", {}).get("payload_dir"),
         )
         # Get image path from config or use a default
         image_path = cfg.get("drives", [{}])[0].get("path_on_host", "")

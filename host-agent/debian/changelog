@@ -1,0 +1,46 @@
+firecracker-cloudstack-agent (0.2.0-1) unstable; urgency=medium
+
+  * Add optional TLS listener configuration gated by the new `security.tls`
+    section and surface certificate/client-auth validation on startup.
+  * Seed `/etc/cloudstack/tls-cert` on install and auto-generate local CA and
+    server certificates with OpenSSL when none are present.
+  * Update systemd unit and CLI wrapper to launch the agent via
+    firecracker-agent.py so TLS/auth settings from the JSON config are honored.
+  * Harden auth loading to treat non-boolean "enabled" values correctly and to
+    skip PAM dependency when authentication is disabled.
+  * Introduce PAM-backed HTTP Basic authentication that is enabled only when
+    the `auth` section is present in /etc/cloudstack/firecracker-agent.json.
+  * Ship the new `utils/auth.py` helper in the Debian package and mark the
+    agent configuration as a conffile for safer upgrades.
+  * Extend the packaged example config with TLS/auth defaults under
+    `/etc/cloudstack/tls-cert` and keep the features disabled by default.
+  * Enhance `firecracker.py` client to negotiate HTTPS (CA bundles, skip verify,
+    mTLS) and HTTP Basic credentials transparently via CloudStack payload.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Sat, 04 Oct 2025 10:00:00 +0000
+
+firecracker-cloudstack-agent (0.1.0-2) unstable; urgency=medium
+
+  * Expose configurable payload_dir in host defaults and documentation.
+  * Persist incoming VM specs to the payload directory via the API.
+  * Ensure systemd service creates /var/lib/firecracker/payload before start.
+  * Validate firecracker binary path during VM startup and fail fast if missing.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Fri, 03 Oct 2025 16:40:00 +0000
+
+firecracker-cloudstack-agent (0.1.0-1) unstable; urgency=low
+
+  * Initial release of Firecracker CloudStack Agent
+  * FastAPI-based RESTFul API for managing Firecracker microVMs
+  * Typer-based CLI interface
+  * Pluggable storage backends (file, LVM, LVM-thin)
+  * Network management with VLAN support
+  * Systemd integration
+  * CloudStack integration ready
+  * Modularized codebase for better maintainability
+  * Separated orchestration layer into dedicated modules
+  * Created dedicated modules for configuration, state, and utilities
+  * Improved code quality and PEP8 compliance
+  * Better error handling and validation
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 02 Oct 2025 16:40:00 +0000
