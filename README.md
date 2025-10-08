@@ -92,6 +92,66 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
   - `enabled`: when true, all `/v1/*` routes require HTTP Basic credentials.
   - `service`: name of the PAM stack (populate `/etc/pam.d/firecracker-agent`). The package depends on `python3-pamela`.
 
+### mTLS Configuration Guide
+1. **Generate a CA, server, and client certificate**
+   ```bash
+   sudo install -d -m 0700 /etc/cloudstack/tls-cert
+   cd /etc/cloudstack/tls-cert
+
+   # Certificate Authority
+   sudo openssl req -x509 -nodes -newkey rsa:4096 -keyout ca.key -out ca.crt \
+     -days 3650 -subj "/CN=Firecracker CA"
+
+   # Server certificate signed by the CA
+   sudo openssl req -nodes -newkey rsa:4096 -keyout server.key -out server.csr \
+     -subj "/CN=$(hostname -f)"
+   sudo openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+     -out server.crt -days 825 -sha256 -extensions v3_req \
+     -extfile <(printf "[v3_req]\nsubjectAltName=DNS:$(hostname -f),IP:$(hostname -I | awk '{print $1)}'\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth")
+
+   # Client certificate (copy the resulting files to the CloudStack management node)
+   sudo openssl req -nodes -newkey rsa:4096 -keyout client.key -out client.csr \
+     -subj "/CN=cloudstack"
+   sudo openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+     -out client.crt -days 825 -sha256 -extensions v3_req \
+     -extfile <(printf "[v3_req]\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\nsubjectAltName=DNS:cloudstack\n")
+   sudo chown root:root *.crt *.key
+   sudo chmod 0640 server.key client.key
+   ```
+   Keep `ca.key` and the `.srl` files on the agent host only; distribute `ca.crt`, `client.crt`, and `client.key` securely to the CloudStack management server.
+
+2. **Configure the agent to require mTLS**
+   - In `/etc/cloudstack/firecracker-agent.json`, set:
+     ```json
+     "security": {
+       "tls": {
+         "enabled": true,
+         "cert_file": "/etc/cloudstack/tls-cert/server.crt",
+         "key_file": "/etc/cloudstack/tls-cert/server.key",
+         "ca_file": "/etc/cloudstack/tls-cert/ca.crt",
+         "client_auth": "required"
+       }
+     }
+     ```
+   - Restart the service so the new certificates and policy are picked up:
+     ```bash
+     sudo systemctl restart firecracker-cloudstack-agent.service
+     journalctl -u firecracker-cloudstack-agent.service -g "TLS enabled"
+     ```
+
+3. **Configure the Firecracker client (`firecracker.py`)**
+   - Supply the CA and client credentials in the CloudStack host payload (or flattened keys):
+     ```json
+     {
+       "host_url": "https://firecracker-host.example.com",
+       "host_port": 8443,
+       "client_cert": "/etc/cloudstack/firecracker/client.crt",
+       "client_key": "/etc/cloudstack/firecracker/client.key",
+       "ca_bundle": "/etc/cloudstack/firecracker/ca.crt"
+     }
+     ```
+   - When using the CLI manually, pass the same values inside the JSON spec file so `firecracker.py` can present the client certificate and trust the agent CA.
+
 ### Storage Backends (`defaults.storage`)
 - `file` – simple sparse files under `volume_dir`. See `host-agent/firecracker-agent.json-file-example`.
 - `lvm` – logical volumes created in `vg`. Optional `size` sets the LV size when images lack metadata. See `host-agent/firecracker-agent.json-lvm-example`.
