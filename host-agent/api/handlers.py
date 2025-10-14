@@ -246,6 +246,98 @@ class APIHandlers:
             logger.exception("Get VM status failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Get VM status failed: {e}")
 
+    def v1_vm_details_by_name(self, vm_name: str) -> Dict[str, Any]:
+        """Return aggregated metadata about a VM."""
+        from utils.filesystem import paths_by_name, read_cfg_json_by_name
+
+        try:
+            validate_name("VM", vm_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        cfg = read_cfg_json_by_name(vm_name)
+        if not cfg:
+            raise HTTPException(status_code=404, detail=f"VM {vm_name} not found")
+
+        paths_obj = paths_by_name(vm_name)
+        power_state = self.vm_lifecycle._get_vm_status_by_name(vm_name)
+        machine_cfg = cfg.get("machine-config") or {}
+        boot_source = cfg.get("boot-source") or {}
+        drives = cfg.get("drives") or []
+        primary_drive: Dict[str, Any] = {}
+        for drive in drives:
+            if isinstance(drive, dict) and drive.get("is_root_device"):
+                primary_drive = drive
+                break
+        if not primary_drive and drives:
+            first_drive = drives[0]
+            if isinstance(first_drive, dict):
+                primary_drive = first_drive
+
+        storage_info: Dict[str, Any] = {
+            "driver": self.agent_defaults.get("storage", {}).get("driver", "file"),
+            "volume_file": str(paths_obj.volume_file),
+            "device_path": primary_drive.get("path_on_host") if isinstance(primary_drive, dict) else None,
+            "cache_type": primary_drive.get("cache_type") if isinstance(primary_drive, dict) else None,
+            "is_read_only": primary_drive.get("is_read_only") if isinstance(primary_drive, dict) else None,
+        }
+        size_candidates = []
+        device_path = storage_info.get("device_path")
+        if device_path:
+            size_candidates.append(device_path)
+        size_candidates.append(str(paths_obj.volume_file))
+        for candidate in size_candidates:
+            try:
+                if candidate:
+                    storage_info["size_bytes"] = Path(candidate).stat().st_size
+                    storage_info["size_source"] = candidate
+                    break
+            except Exception:
+                continue
+
+        raw_ifaces = cfg.get("network-interfaces") or []
+        network_interfaces: List[Dict[str, Any]] = []
+        for iface in raw_ifaces:
+            if not isinstance(iface, dict):
+                continue
+            network_interfaces.append(
+                {
+                    "iface_id": iface.get("iface_id"),
+                    "guest_mac": iface.get("guest_mac"),
+                    "host_dev_name": iface.get("host_dev_name"),
+                }
+            )
+
+        saved_network_cfg = self.config_manager.load_network_config(vm_name)
+        network_info: Dict[str, Any] = {"interfaces": network_interfaces}
+        if saved_network_cfg:
+            network_info["saved_config"] = saved_network_cfg
+
+        vm_config = {
+            "cpus": machine_cfg.get("vcpu_count"),
+            "memory_mib": machine_cfg.get("mem_size_mib"),
+            "kernel_image_path": boot_source.get("kernel_image_path"),
+            "boot_args": boot_source.get("boot_args"),
+        }
+
+        auxiliary_paths = {
+            "config_file": str(paths_obj.config_file),
+            "log_file": str(paths_obj.log_file),
+            "socket_file": str(paths_obj.socket_file),
+            "pid_file": str(paths_obj.pid_file),
+        }
+
+        return {
+            "status": "success",
+            "vm_name": vm_name,
+            "power_state": power_state,
+            "vm_config": vm_config,
+            "storage": storage_info,
+            "network": network_info,
+            "paths": auxiliary_paths,
+            "firecracker_config": cfg,
+        }
+
     def v1_vm_stop_by_name(self, vm_name: str) -> Dict[str, Any]:
         """Stop VM by name."""
         try:

@@ -53,6 +53,10 @@ def register_routes(
     def v1_vm_status_by_name(vm_name: str):
         return handlers.v1_vm_status_by_name(vm_name)
 
+    @app.get("/v1/vms/{vm_name}/details", **protected)
+    def v1_vm_details_by_name(vm_name: str):
+        return handlers.v1_vm_details_by_name(vm_name)
+
     @app.post("/v1/vms/{vm_name}/stop", **protected)
     def v1_vm_stop_by_name(vm_name: str):
         return handlers.v1_vm_stop_by_name(vm_name)
@@ -102,4 +106,3 @@ def register_routes(
     @app.delete("/v1/network-config/{vm_name}", **protected)
     def v1_delete_network_config(vm_name: str):
         return handlers.v1_delete_network_config(vm_name)
-
