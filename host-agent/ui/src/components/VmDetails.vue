@@ -98,7 +98,7 @@
       </section>
 
       <section>
-        <h3 class="section-title">Image & Payload</h3>
+        <h3 class="section-title">Template</h3>
         <table class="details-table">
           <tbody>
             <tr>
@@ -185,16 +185,33 @@ const storageSizeLabel = computed(() => {
 const networkInterfaces = computed(() => props.details?.network?.interfaces || []);
 const originImageLabel = computed(() => {
   const config = props.details?.firecracker_config;
-  if (config && typeof config.image_idr === "string" && config.image_idr.trim()) {
-    return config.image_idr;
-  }
-  if (config && typeof config.image_id === "string" && config.image_id.trim()) {
-    return config.image_id;
-  }
+  const baseDir =
+    (config && typeof config.image_dir === "string" && config.image_dir.trim()) ||
+    props.details?.agent_defaults?.host?.image_dir;
+
+  const fromConfig = config && typeof config.image_idr === "string" && config.image_idr.trim();
+  const legacyConfig = config && typeof config.image_id === "string" && config.image_id.trim();
   const payloadImage = props.details?.payload?.image;
-  if (typeof payloadImage === "string" && payloadImage.trim()) {
-    return payloadImage;
+
+  const imageToken = fromConfig || legacyConfig || payloadImage;
+  if (!imageToken || typeof imageToken !== "string" || !imageToken.trim()) {
+    return "-";
   }
-  return "-";
+
+  if (
+    imageToken.startsWith("/") ||
+    imageToken.startsWith("./") ||
+    imageToken.startsWith("../") ||
+    imageToken.includes(":\\")
+  ) {
+    return imageToken;
+  }
+
+  if (!baseDir) {
+    return imageToken;
+  }
+
+  const sanitizedBase = baseDir.endsWith("/") ? baseDir.slice(0, -1) : baseDir;
+  return `${sanitizedBase}/${imageToken}`;
 });
 </script>
