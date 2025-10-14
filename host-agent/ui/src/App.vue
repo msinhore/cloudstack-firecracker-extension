@@ -13,7 +13,6 @@
           <div class="navbar-content">
             <div>
               <h1>CloudStack Firecracker Agent UI</h1>
-              <p class="timestamp">Last refreshed: {{ lastUpdatedLabel }}</p>
             </div>
             <div class="auth-controls">
               <button class="btn btn-default btn-sm" @click="handleLogout">Sign out</button>
@@ -41,10 +40,6 @@
                 <span class="value">{{ cpuLabel }}</span>
               </div>
               <div class="host-stat">
-                <span class="label">Clock</span>
-                <span class="value">{{ cpuClockLabel }}</span>
-              </div>
-              <div class="host-stat">
                 <span class="label">Memory</span>
                 <span class="value">{{ memoryLabel }}</span>
               </div>
@@ -52,9 +47,17 @@
                 <span class="label">Disk</span>
                 <span class="value">{{ diskLabel }}</span>
               </div>
-              <div class="host-stat">
-                <span class="label">Uptime</span>
-                <span class="value">{{ uptimeLabel }}</span>
+            </div>
+
+            <div v-if="hostInterfaces.length" class="host-interfaces">
+              <div v-for="iface in hostInterfaces" :key="iface.name" class="host-interface">
+                <div class="iface-name">
+                  {{ iface.name }}
+                  <span v-if="iface.mac" class="iface-mac">· {{ iface.mac }}</span>
+                </div>
+                <div class="iface-addresses">
+                  {{ iface.labels.join(", ") }}
+                </div>
               </div>
             </div>
           </div>
@@ -172,17 +175,6 @@ const cpuLabel = computed(() => {
   return "-";
 });
 
-const cpuClockLabel = computed(() => {
-  const cpu = hostSummary.value?.cpu;
-  if (!cpu) return "-";
-  const freq = cpu.max_frequency_mhz || cpu.current_frequency_mhz;
-  if (!freq) return "-";
-  if (freq >= 1000) {
-    return `${(freq / 1000).toFixed(1)} GHz`;
-  }
-  return `${freq} MHz`;
-});
-
 const memoryLabel = computed(() => {
   const totalBytes = hostSummary.value?.memory?.total_bytes;
   if (!totalBytes) return "-";
@@ -207,19 +199,66 @@ const diskLabel = computed(() => {
   return `${gib.toFixed(1)} GiB`;
 });
 
-const uptimeLabel = computed(() => {
-  const seconds = hostSummary.value?.uptime_seconds;
-  if (!seconds) return "-";
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) {
-    return `${days}d ${hours}h`;
+const isBridgeInterface = (name) => {
+  if (!name) {
+    return false;
   }
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+  const lower = name.toLowerCase();
+  return lower.startsWith("br") || lower.startsWith("virbr") || lower.includes("bridge");
+};
+
+const hostInterfaces = computed(() => {
+  const summary = hostSummary.value;
+  if (!summary) {
+    return [];
   }
-  return `${minutes} minutes`;
+
+  const macMap = Object.create(null);
+  (summary.mac_addresses || []).forEach((entry) => {
+    if (entry?.interface && entry.mac) {
+      macMap[entry.interface] = entry.mac;
+    }
+  });
+
+  const addressMap = new Map();
+  (summary.ip_addresses || []).forEach((entry) => {
+    const iface = entry?.interface;
+    const address = entry?.address;
+    const family = entry?.family;
+    if (!iface || !address) {
+      return;
+    }
+    if (entry.is_loopback) {
+      return;
+    }
+    if (/^f0-/i.test(iface)) {
+      return;
+    }
+    if (isBridgeInterface(iface)) {
+      return;
+    }
+    if (!addressMap.has(iface)) {
+      addressMap.set(iface, []);
+    }
+    addressMap.get(iface).push({ address, family });
+  });
+
+  return Array.from(addressMap.entries())
+    .map(([name, addresses]) => {
+      const formatted = addresses.map((info) => {
+        if (!info.family || info.family === "IPv4") {
+          return info.address;
+        }
+        return `${info.address} (${info.family})`;
+      });
+      return {
+        name,
+        mac: macMap[name],
+        labels: formatted,
+      };
+    })
+    .filter((entry) => entry.labels.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
 
 onMounted(() => {
@@ -321,6 +360,41 @@ watch(
   font-size: 15px;
   font-weight: 500;
   color: #ffffff;
+}
+
+.host-interfaces {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.host-interface {
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.iface-name {
+  font-weight: 600;
+  color: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.iface-mac {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.iface-addresses {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 @media (max-width: 768px) {
