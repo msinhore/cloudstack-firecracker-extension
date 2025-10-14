@@ -49,6 +49,10 @@ def register_routes(
     def v1_list_vms():
         return handlers.v1_list_vms()
 
+    @app.get("/v1/host/summary", **protected)
+    def v1_host_summary():
+        return handlers.v1_host_summary()
+
     @app.get("/v1/vms/{vm_name}/status", **protected)
     def v1_vm_status_by_name(vm_name: str):
         return handlers.v1_vm_status_by_name(vm_name)

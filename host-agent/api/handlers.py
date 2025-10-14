@@ -6,9 +6,13 @@ This module contains the API endpoint handlers for VM operations.
 """
 import json
 import logging
+import platform
+import socket
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import psutil
 
 from fastapi import HTTPException
 
@@ -245,6 +249,20 @@ class APIHandlers:
         except Exception as e:
             logger.exception("Get VM status failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Get VM status failed: {e}")
+
+    def v1_host_summary(self) -> Dict[str, Any]:
+        """Return hardware summary for the host."""
+        try:
+            info = self._collect_host_summary()
+            return {
+                "status": "success",
+                "host": info,
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to collect host summary: %s", exc)
+            raise HTTPException(status_code=500, detail=f"Failed to collect host summary: {exc}")
 
     def v1_vm_details_by_name(self, vm_name: str) -> Dict[str, Any]:
         """Return aggregated metadata about a VM."""
@@ -671,6 +689,57 @@ class APIHandlers:
         backend = get_networking_backend_by_driver(spec.net.driver, spec, paths_obj)
         backend.teardown()
 
+    def _collect_host_summary(self) -> Dict[str, Any]:
+        """Collect host hardware summary."""
+        try:
+            hostname = socket.gethostname()
+        except Exception:
+            hostname = None
+        try:
+            fqdn = socket.getfqdn()
+        except Exception:
+            fqdn = None
+
+        try:
+            ip_addresses = _discover_ip_addresses()
+        except Exception as exc:
+            logger.warning("Failed to list IP addresses: %s", exc)
+            ip_addresses = []
+
+        try:
+            mac_addresses = _discover_mac_addresses()
+        except Exception as exc:
+            logger.warning("Failed to list MAC addresses: %s", exc)
+            mac_addresses = []
+
+        try:
+            cpu_info = _collect_cpu_info()
+        except Exception as exc:
+            logger.warning("Failed to collect CPU info: %s", exc)
+            cpu_info = {}
+
+        try:
+            memory_info = _collect_memory_info()
+        except Exception as exc:
+            logger.warning("Failed to collect memory info: %s", exc)
+            memory_info = {}
+
+        try:
+            disk_info = _collect_disk_info()
+        except Exception as exc:
+            logger.warning("Failed to collect disk info: %s", exc)
+            disk_info = []
+
+        return {
+            "hostname": hostname,
+            "fqdn": fqdn,
+            "ip_addresses": ip_addresses,
+            "mac_addresses": mac_addresses,
+            "cpu": cpu_info,
+            "memory": memory_info,
+            "disks": disk_info,
+        }
+
     def _extract_payload_metadata(self, raw_payload: Dict[str, Any], payload_path: Path) -> Dict[str, Any]:
         """Extract relevant metadata from saved CloudStack payload."""
         payload_details = raw_payload.get("cloudstack.vm.details", {})
@@ -739,3 +808,119 @@ class APIHandlers:
 
         _redact(clone)
         return clone
+
+
+def _discover_ip_addresses() -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    try:
+        addrs = psutil.net_if_addrs()
+        stats = psutil.net_if_stats()
+    except Exception:
+        return results
+    for iface, entries in addrs.items():
+        iface_stats = stats.get(iface)
+        is_loopback = bool(getattr(iface_stats, "isloopback", False))
+        for entry in entries:
+            family_label = None
+            if entry.family == socket.AF_INET:
+                family_label = "IPv4"
+            elif entry.family == socket.AF_INET6:
+                family_label = "IPv6"
+            if not family_label or not entry.address:
+                continue
+            address = entry.address
+            if family_label == "IPv6" and "%" in address:
+                address = address.split("%", 1)[0]
+            results.append(
+                {
+                    "interface": iface,
+                    "address": address,
+                    "family": family_label,
+                    "is_loopback": is_loopback,
+                }
+            )
+    return results
+
+
+def _discover_mac_addresses() -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    try:
+        addrs = psutil.net_if_addrs()
+    except Exception:
+        return results
+    link_family = getattr(psutil, "AF_LINK", None)
+    packet_family = getattr(socket, "AF_PACKET", None)
+    for iface, entries in addrs.items():
+        for entry in entries:
+            if link_family is not None:
+                if entry.family != link_family:
+                    continue
+            elif packet_family is not None:
+                if entry.family != packet_family:
+                    continue
+            elif entry.family not in {17}:  # Fallback AF_LINK value on some systems
+                continue
+            if not entry.address:
+                continue
+            results.append({"interface": iface, "mac": entry.address})
+    return results
+
+
+def _collect_cpu_info() -> Dict[str, Any]:
+    try:
+        freq = psutil.cpu_freq()
+    except Exception:
+        freq = None
+    info: Dict[str, Any] = {
+        "physical_cores": psutil.cpu_count(logical=False),
+        "logical_cores": psutil.cpu_count(logical=True),
+        "model": platform.processor() or None,
+    }
+    if freq:
+        info.update(
+            {
+                "current_mhz": getattr(freq, "current", None),
+                "min_mhz": getattr(freq, "min", None),
+                "max_mhz": getattr(freq, "max", None),
+            }
+        )
+    try:
+        info["load_percent"] = psutil.cpu_percent(interval=None)
+    except Exception:
+        info["load_percent"] = None
+    return info
+
+
+def _collect_memory_info() -> Dict[str, Any]:
+    vm = psutil.virtual_memory()
+    return {
+        "total_bytes": vm.total,
+        "available_bytes": vm.available,
+        "used_bytes": vm.used,
+        "percent": vm.percent,
+    }
+
+
+def _collect_disk_info() -> List[Dict[str, Any]]:
+    disks: List[Dict[str, Any]] = []
+    try:
+        partitions = psutil.disk_partitions(all=False)
+    except Exception:
+        return disks
+    for part in partitions:
+        try:
+            usage = psutil.disk_usage(part.mountpoint)
+        except Exception:
+            continue
+        disks.append(
+            {
+                "device": part.device or part.mountpoint,
+                "mountpoint": part.mountpoint,
+                "fstype": part.fstype,
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "free_bytes": usage.free,
+                "percent_used": usage.percent,
+            }
+        )
+    return disks

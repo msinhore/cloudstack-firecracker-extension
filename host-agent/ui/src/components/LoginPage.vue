@@ -1,7 +1,7 @@
 <template>
   <div class="login-page">
     <div class="login-card">
-      <h1 class="login-title">CloudStack Firecracker Host</h1>
+      <h1 class="login-title">CloudStack Firecracker Agent UI</h1>
       <p class="login-subtitle">Sign in to view the host inventory.</p>
 
       <div v-if="error" class="login-alert" role="alert">
