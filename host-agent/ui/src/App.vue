@@ -1,41 +1,41 @@
 <template>
-  <div>
-    <header class="fc-navbar">
-      <div class="container-fluid navbar-content">
-        <div>
-          <h1>CloudStack Firecracker Host</h1>
-          <p class="timestamp">Last refreshed: {{ lastUpdatedLabel }}</p>
-        </div>
-        <div class="auth-controls">
-          <button v-if="isAuthenticated" class="btn btn-default btn-sm" @click="handleLogout">
-            Sign out
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <main class="container-fluid" style="max-width: 1200px">
-      <VmList ref="vmListRef" @update-timestamp="updateTimestamp" @auth-required="handleAuthRequired" />
-    </main>
-
-    <LoginModal
-      :visible="showLogin"
+  <div class="app-root">
+    <LoginPage
+      v-if="!isAuthenticated"
       :error="loginError"
+      :loading="loginLoading"
       @submit="handleLoginSubmit"
-      @cancel="handleLoginCancel"
     />
+
+    <div v-else class="app-shell">
+      <header class="fc-navbar">
+        <div class="container-fluid navbar-content">
+          <div>
+            <h1>CloudStack Firecracker Host</h1>
+            <p class="timestamp">Last refreshed: {{ lastUpdatedLabel }}</p>
+          </div>
+          <div class="auth-controls">
+            <button class="btn btn-default btn-sm" @click="handleLogout">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="container-fluid" style="max-width: 1200px">
+        <VmList ref="vmListRef" @update-timestamp="updateTimestamp" @auth-required="handleAuthRequired" />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import LoginPage from "./components/LoginPage.vue";
 import VmList from "./components/VmList.vue";
-import LoginModal from "./components/LoginModal.vue";
-import { clearAuth, loadAuthFromStorage, setBasicAuth } from "./services/apiClient";
+import { api, clearAuth, loadAuthFromStorage, setBasicAuth } from "./services/apiClient";
 
 const lastUpdated = ref(null);
-const showLogin = ref(false);
 const loginError = ref("");
+const loginLoading = ref(false);
 const isAuthenticated = ref(false);
 const vmListRef = ref(null);
 
@@ -45,26 +45,29 @@ const updateTimestamp = (value) => {
 
 const setAuthState = (state) => {
   isAuthenticated.value = state;
+  if (!state) {
+    lastUpdated.value = null;
+  }
 };
 
 const handleAuthRequired = (message) => {
   clearAuth();
   setAuthState(false);
+  loginLoading.value = false;
   if (typeof message === "string" && message.trim()) {
     loginError.value = message;
   } else if (!loginError.value) {
     loginError.value = "Authentication is required to access this host.";
   }
-  showLogin.value = true;
 };
 
 const handleLoginSubmit = async ({ username, password }) => {
+  loginLoading.value = true;
+  loginError.value = "";
   try {
-    loginError.value = "";
     setBasicAuth(username, password);
-    await vmListRef.value?.refresh();
+    await api.get("/v1/vms");
     setAuthState(true);
-    showLogin.value = false;
   } catch (error) {
     clearAuth();
     setAuthState(false);
@@ -73,19 +76,14 @@ const handleLoginSubmit = async ({ username, password }) => {
     } else {
       loginError.value = error?.message || "Failed to authenticate. Please try again.";
     }
-    showLogin.value = true;
+  } finally {
+    loginLoading.value = false;
   }
-};
-
-const handleLoginCancel = () => {
-  showLogin.value = false;
-  loginError.value = "";
 };
 
 const handleLogout = () => {
   clearAuth();
   setAuthState(false);
-  showLogin.value = true;
   loginError.value = "";
 };
 

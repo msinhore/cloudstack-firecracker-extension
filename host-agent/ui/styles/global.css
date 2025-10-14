@@ -107,27 +107,3 @@ body {
   font-size: 12px;
   color: #8a939e;
 }
-
-.auth-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(43, 61, 79, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  padding: 20px;
-}
-
-.auth-dialog {
-  max-width: 400px;
-  width: 100%;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-}
-
-.auth-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
