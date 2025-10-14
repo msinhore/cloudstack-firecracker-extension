@@ -30,6 +30,7 @@ host-agent/api/handlers.py                          usr/lib/firecracker-cloudsta
 host-agent/api/routes.py                            usr/lib/firecracker-cloudstack-agent/api/
 host-agent/cli/__init__.py                          usr/lib/firecracker-cloudstack-agent/cli/
 host-agent/cli/commands.py                          usr/lib/firecracker-cloudstack-agent/cli/
+host-agent/ui/dist                                  usr/lib/firecracker-cloudstack-agent/ui/
 debian/firecracker-cloudstack-agent.service         etc/systemd/system/
 debian/firecracker-cloudstack-shutdown.service      etc/systemd/system/
 debian/firecracker-agent.json                       etc/cloudstack/

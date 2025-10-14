@@ -1,3 +1,14 @@
 #!/usr/bin/make -f
+
 %:
 	dh $@
+
+override_dh_auto_build:
+	dh_auto_build
+	cd host-agent/ui && npm install --no-audit --no-fund --no-save
+	cd host-agent/ui && npm run build
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf host-agent/ui/dist host-agent/ui/node_modules
+	rm -f host-agent/ui/package-lock.json

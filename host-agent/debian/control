@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: CHANGE ME <you@example.com>
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 13), nodejs, npm
 
 Package: firecracker-cloudstack-agent
 Architecture: all
