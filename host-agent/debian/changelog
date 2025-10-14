@@ -1,5 +1,9 @@
-firecracker-cloudstack-agent (0.3.0-2) unstable; urgency=medium
+firecracker-cloudstack-agent (0.3.0-0) unstable; urgency=medium
 
+  * Added a Vue-based host dashboard served from the agent (/ui) with 
+    basic-auth backed by the existing API.
+  * Surfaced host metadata fed by the new /v1/host/summary endpoint.
+  * Streamlined VM detail panels.
   * Add `/v1/vms/{name}/details` endpoint to expose aggregated VM metadata for
     the host dashboard.
   * Ship the new read-only Vue dashboard under `/ui` and serve the compiled
@@ -8,8 +12,8 @@ firecracker-cloudstack-agent (0.3.0-2) unstable; urgency=medium
     the agent API during host shutdown.
   * Extend the Debian packaging to build the UI bundle with npm and install the
     generated `dist/` assets alongside the agent.
-
- -- Marco Sinhoreli <msinhore@gmail.com>  Tue, 08 Oct 2025 20:00:00 +0000
+  
+ -- Marco Sinhoreli <msinhore@gmail.com>  Tue, 14 Oct 2025 23:58:00 +0000
 
 firecracker-cloudstack-agent (0.2.0-1) unstable; urgency=medium
 
