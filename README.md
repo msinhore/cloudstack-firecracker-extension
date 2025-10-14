@@ -15,6 +15,7 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
 - HTTPS listeners with auto-generated self-signed CA/server certificates and optional client-auth (`none`, `optional`, `required`).
 - PAM-backed HTTP Basic authentication; disable it when not needed.
 - Persistent VM metadata for crash recovery and rebuild.
+- Companion shutdown service that calls the agent API to stop running microVMs during host shutdown.
 
 ---
 ## Host Installation (Ubuntu 24.04)

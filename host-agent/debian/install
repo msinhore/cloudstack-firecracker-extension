@@ -24,11 +24,13 @@ host-agent/utils/auth.py                            usr/lib/firecracker-cloudsta
 host-agent/utils/validation.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/filesystem.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/tmux.py                            usr/lib/firecracker-cloudstack-agent/utils/
+host-agent/tools/fc_shutdown_service.py             usr/lib/firecracker-cloudstack-agent/tools/
 host-agent/api/__init__.py                          usr/lib/firecracker-cloudstack-agent/api/
 host-agent/api/handlers.py                          usr/lib/firecracker-cloudstack-agent/api/
 host-agent/api/routes.py                            usr/lib/firecracker-cloudstack-agent/api/
 host-agent/cli/__init__.py                          usr/lib/firecracker-cloudstack-agent/cli/
 host-agent/cli/commands.py                          usr/lib/firecracker-cloudstack-agent/cli/
 debian/firecracker-cloudstack-agent.service         etc/systemd/system/
+debian/firecracker-cloudstack-shutdown.service      etc/systemd/system/
 debian/firecracker-agent.json                       etc/cloudstack/
 debian/firecracker-cloudstack-agent.wrapper         usr/bin/firecracker-cloudstack-agent

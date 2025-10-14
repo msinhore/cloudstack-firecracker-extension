@@ -1,0 +1,18 @@
+[Unit]
+Description=Firecracker CloudStack Shutdown Service
+PartOf=firecracker-cloudstack-agent.service
+After=firecracker-cloudstack-agent.service
+Before=shutdown.target reboot.target halt.target
+ConditionPathExists=/etc/cloudstack/firecracker-agent.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PYTHONUNBUFFERED=1
+Environment=FC_SHUTDOWN_CONFIG=/etc/cloudstack/firecracker-agent.json
+ExecStart=/bin/true
+ExecStop=/usr/bin/python3 -u /usr/lib/firecracker-cloudstack-agent/tools/fc_shutdown_service.py
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 [Unit]
 Description=Firecracker Agent (FastAPI + Typer)
 After=network-online.target
-Wants=network-online.target
+Wants=network-online.target firecracker-cloudstack-shutdown.service
 
 [Service]
 Type=simple
@@ -17,7 +17,6 @@ ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/run
 ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/volumes
 ExecStartPre=/usr/bin/mkdir -p /var/lib/firecracker/payload
 ExecStart=/usr/bin/python3 -u /usr/local/bin/firecracker-agent.py
-ExecStop=/usr/local/bin/firecracker-agent-shutdown.sh
 Restart=always
 RestartSec=5s
 StandardOutput=journal
