@@ -1,3 +1,16 @@
+firecracker-cloudstack-agent (0.2.1-1) unstable; urgency=medium
+
+  * Add `/v1/vms/{name}/details` endpoint to expose aggregated VM metadata for
+    the host dashboard.
+  * Ship the new read-only Vue dashboard under `/ui` and serve the compiled
+    assets directly from the agent process.
+  * Include a systemd shutdown helper that stops running Firecracker VMs via
+    the agent API during host shutdown.
+  * Extend the Debian packaging to build the UI bundle with npm and install the
+    generated `dist/` assets alongside the agent.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Tue, 08 Oct 2025 20:00:00 +0000
+
 firecracker-cloudstack-agent (0.2.0-1) unstable; urgency=medium
 
   * Add optional TLS listener configuration gated by the new `security.tls`

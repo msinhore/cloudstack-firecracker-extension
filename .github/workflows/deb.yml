@@ -39,15 +39,11 @@ jobs:
           npm install --no-audit --no-fund --no-save
           npm run build
 
-      - name: Symlink debian directory
+      - name: Prepare debian directory
         run: |
-          if [ -L debian ] || [ -d debian ]; then
-            echo "debian path already present"
-            ls -ld debian
-          else
-            ln -s host-agent/debian debian
-          fi
-          ls -l debian
+          rm -rf debian
+          cp -a host-agent/debian debian
+          ls -ld debian
 
       - name: Build package
         run: |
