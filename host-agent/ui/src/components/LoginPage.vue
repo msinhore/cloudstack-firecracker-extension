@@ -159,6 +159,7 @@ const submit = () => {
 }
 
 .login-input {
+  box-sizing: border-box;
   width: 100%;
   height: 44px;
   border: 1px solid #d9dfe7;
