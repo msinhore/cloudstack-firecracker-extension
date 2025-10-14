@@ -1,4 +1,4 @@
-firecracker-cloudstack-agent (0.3.0-1) unstable; urgency=medium
+firecracker-cloudstack-agent (0.3.0-2) unstable; urgency=medium
 
   * Add `/v1/vms/{name}/details` endpoint to expose aggregated VM metadata for
     the host dashboard.
