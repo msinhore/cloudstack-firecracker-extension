@@ -86,17 +86,6 @@
               </td>
             </tr>
             <tr>
-              <td>Saved NIC</td>
-              <td v-if="payloadNic">
-                MAC {{ payloadNic.mac }} · IP {{ payloadNic.ip }} · Netmask {{ payloadNic.netmask }}
-                <span v-if="payloadNic.gateway">· Gateway {{ payloadNic.gateway }}</span>
-                <div v-if="payloadNic.network_name" class="timestamp">
-                  Network: {{ payloadNic.network_name }}
-                </div>
-              </td>
-              <td v-else>-</td>
-            </tr>
-            <tr>
               <td>VLAN</td>
               <td>{{ details.payload?.vlan || "-" }}</td>
             </tr>
@@ -115,18 +104,6 @@
             <tr>
               <td>Origin Image</td>
               <td>{{ details.payload?.image || "-" }}</td>
-            </tr>
-            <tr>
-              <td>Kernel (payload)</td>
-              <td>{{ details.payload?.kernel || "-" }}</td>
-            </tr>
-            <tr>
-              <td>Boot Args (payload)</td>
-              <td><code>{{ details.payload?.boot_args || "-" }}</code></td>
-            </tr>
-            <tr>
-              <td>Payload Source</td>
-              <td>{{ details.payload?.source || "-" }}</td>
             </tr>
           </tbody>
         </table>
@@ -156,20 +133,12 @@
         </table>
       </section>
 
-      <section style="margin-top: 20px">
-        <button class="btn btn-xs btn-default" type="button" @click="rawVisible = !rawVisible">
-          {{ rawVisible ? "Hide raw payload" : "Show raw payload JSON" }}
-        </button>
-        <div v-if="rawVisible" style="margin-top: 12px">
-          <pre style="max-height: 320px; overflow: auto">{{ prettyPayload }}</pre>
-        </div>
-      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 const props = defineProps({
   vmName: {
@@ -191,8 +160,6 @@ const props = defineProps({
 });
 
 defineEmits(["retry"]);
-
-const rawVisible = ref(false);
 
 const memoryLabel = computed(() => {
   const mib = props.details?.vm_config?.memory_mib;
@@ -216,15 +183,4 @@ const storageSizeLabel = computed(() => {
 });
 
 const networkInterfaces = computed(() => props.details?.network?.interfaces || []);
-const payloadNic = computed(() => props.details?.payload?.nic || null);
-const prettyPayload = computed(() => {
-  if (!props.details?.payload?.raw) {
-    return "No payload data available.";
-  }
-  try {
-    return JSON.stringify(props.details.payload.raw, null, 2);
-  } catch (err) {
-    return "Failed to render payload JSON.";
-  }
-});
 </script>
