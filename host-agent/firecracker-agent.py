@@ -27,8 +27,9 @@ from typing import Any, Dict
 import typer
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse
 
 from api import register_routes
 from cli import CLICommands
@@ -55,6 +56,7 @@ AGENT_CFG: Dict[str, Any] = {}
 AUTH_DEPENDENCY = None
 TLS_OPTIONS: Dict[str, Any] = {}
 IS_API_MODE = True
+UI_STATIC_MOUNTED = False
 # Initialize FastAPI app
 app = FastAPI(title="Firecracker Agent", version="1.0.0")
 
@@ -126,6 +128,35 @@ def _build_tls_options(security_cfg: Any) -> Dict[str, Any]:
     return options
 
 
+def _mount_ui_static_if_available() -> None:
+    """Mount the compiled web UI under /ui when assets are present."""
+    global UI_STATIC_MOUNTED
+    if UI_STATIC_MOUNTED:
+        return
+
+    ui_root = Path(__file__).resolve().parent / "ui"
+    dist_dir = ui_root / "dist"
+    index_file = ui_root / "index.html"
+
+    if dist_dir.exists():
+        app.mount("/ui", StaticFiles(directory=str(dist_dir), html=True), name="ui")
+        UI_STATIC_MOUNTED = True
+        logger.info("Mounted host UI assets from %s", dist_dir)
+        return
+
+    if index_file.exists():
+        logger.info("UI dist missing, serving development index from %s", index_file)
+
+        @app.get("/ui", include_in_schema=False)
+        async def _ui_index_dev():
+            return FileResponse(index_file)
+
+        UI_STATIC_MOUNTED = True
+        return
+
+    logger.info("UI assets not found (expected %s). UI endpoints disabled.", dist_dir)
+
+
 def _configure_auth_dependency(auth_cfg: Any):
     """Configure optional authentication dependency."""
     if not auth_cfg or not isinstance(auth_cfg, dict):
@@ -171,6 +202,7 @@ async def startup_event():
     if AUTH_DEPENDENCY is None:
         AUTH_DEPENDENCY = _configure_auth_dependency(AGENT_CFG.get("auth", {}))
     register_routes(app, AGENT_DEFAULTS, AUTH_DEPENDENCY)
+    _mount_ui_static_if_available()
     # Initialize VM lifecycle for recovery
     vm_lifecycle = VMLifecycle(AGENT_DEFAULTS)
     vm_lifecycle.startup_vm_recovery()

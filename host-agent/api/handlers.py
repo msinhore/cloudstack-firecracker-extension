@@ -327,6 +327,18 @@ class APIHandlers:
             "pid_file": str(paths_obj.pid_file),
         }
 
+        payload_info: Optional[Dict[str, Any]] = None
+        payload_dir = self.agent_defaults.get("host", {}).get("payload_dir")
+        if payload_dir:
+            payload_path = Path(payload_dir) / f"create-spec-{vm_name}.json"
+            if payload_path.exists():
+                try:
+                    with payload_path.open("r", encoding="utf-8") as f:
+                        raw_payload = json.load(f)
+                    payload_info = self._extract_payload_metadata(raw_payload, payload_path)
+                except Exception as exc:
+                    logger.warning("Failed to read payload for VM %s: %s", vm_name, exc)
+
         return {
             "status": "success",
             "vm_name": vm_name,
@@ -336,6 +348,7 @@ class APIHandlers:
             "network": network_info,
             "paths": auxiliary_paths,
             "firecracker_config": cfg,
+            "payload": payload_info,
         }
 
     def v1_vm_stop_by_name(self, vm_name: str) -> Dict[str, Any]:
@@ -657,3 +670,72 @@ class APIHandlers:
 
         backend = get_networking_backend_by_driver(spec.net.driver, spec, paths_obj)
         backend.teardown()
+
+    def _extract_payload_metadata(self, raw_payload: Dict[str, Any], payload_path: Path) -> Dict[str, Any]:
+        """Extract relevant metadata from saved CloudStack payload."""
+        payload_details = raw_payload.get("cloudstack.vm.details", {})
+        details_section = payload_details.get("details") if isinstance(payload_details.get("details"), dict) else {}
+        external_vm = raw_payload.get("externaldetails", {}).get("virtualmachine", {})
+        network_map = payload_details.get("networkIdToNetworkNameMap") or {}
+        nics = payload_details.get("nics") or []
+        nic = nics[0] if nics else {}
+
+        image = details_section.get("External:image") or external_vm.get("image")
+        kernel = details_section.get("External:kernel") or external_vm.get("kernel")
+        boot_args = details_section.get("External:boot_args") or external_vm.get("boot_args")
+        vlan = external_vm.get("cloudstack.vlan") or nic.get("broadcastUri", "").replace("vlan://", "") or nic.get("isolationUri", "").replace("vlan://", "")
+
+        nic_info = None
+        if isinstance(nic, dict):
+            nic_info = {
+                "mac": nic.get("mac"),
+                "ip": nic.get("ip"),
+                "netmask": nic.get("netmask"),
+                "gateway": nic.get("gateway"),
+                "broadcast_uri": nic.get("broadcastUri"),
+                "network_name": network_map.get(str(nic.get("networkId"))) if network_map else None,
+            }
+
+        return {
+            "source": str(payload_path),
+            "cloudstack_vm_id": payload_details.get("uuid") or raw_payload.get("virtualmachineid"),
+            "image": image,
+            "kernel": kernel,
+            "boot_args": boot_args,
+            "vlan": vlan,
+            "uplink": external_vm.get("uplink"),
+            "details": {
+                "cpus": payload_details.get("cpus"),
+                "memory_bytes": payload_details.get("minRam"),
+                "ha_enabled": payload_details.get("enableHA"),
+                "limit_cpu_use": payload_details.get("limitCpuUse"),
+            },
+            "nic": nic_info,
+            "raw": self._sanitize_payload(raw_payload),
+        }
+
+    def _sanitize_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a recursively sanitized copy of the payload with sensitive fields redacted."""
+        try:
+            # Deep copy via JSON round-trip to avoid mutating the original reference
+            clone = json.loads(json.dumps(payload))
+        except Exception:
+            return {}
+
+        sensitive_keys = {"password", "secret", "token", "key", "vncpassword"}
+        explicit_keys = {"SSH.PublicKey"}
+
+        def _redact(obj: Any) -> None:
+            if isinstance(obj, dict):
+                for key, value in list(obj.items()):
+                    key_lower = str(key).lower()
+                    if key_lower in sensitive_keys or key in explicit_keys:
+                        obj[key] = "***redacted***"
+                    else:
+                        _redact(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    _redact(item)
+
+        _redact(clone)
+        return clone
