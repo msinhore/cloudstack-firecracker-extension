@@ -12,7 +12,7 @@
         <div class="container-fluid">
           <div class="navbar-content">
             <div>
-              <h1>CloudStack Firecracker Host</h1>
+              <h1>CloudStack Firecracker Agent UI</h1>
               <p class="timestamp">Last refreshed: {{ lastUpdatedLabel }}</p>
             </div>
             <div class="auth-controls">
@@ -69,7 +69,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import LoginPage from "./components/LoginPage.vue";
 import VmList from "./components/VmList.vue";
 import { api, clearAuth, loadAuthFromStorage, setBasicAuth } from "./services/apiClient";
@@ -233,6 +233,21 @@ onMounted(() => {
     });
   }
 });
+
+watch(
+  () => isAuthenticated.value,
+  (value) => {
+    if (value) {
+      if (!hostSummary.value) {
+        fetchHostSummary().catch(() => {
+          /* non-fatal */
+        });
+      }
+    } else {
+      hostSummary.value = null;
+    }
+  }
+);
 </script>
 
 <style scoped>

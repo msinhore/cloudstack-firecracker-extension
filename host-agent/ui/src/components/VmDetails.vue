@@ -103,7 +103,7 @@
           <tbody>
             <tr>
               <td>Origin Image</td>
-              <td>{{ details.payload?.image || "-" }}</td>
+              <td>{{ originImageLabel }}</td>
             </tr>
           </tbody>
         </table>
@@ -183,4 +183,18 @@ const storageSizeLabel = computed(() => {
 });
 
 const networkInterfaces = computed(() => props.details?.network?.interfaces || []);
+const originImageLabel = computed(() => {
+  const config = props.details?.firecracker_config;
+  if (config && typeof config.image_idr === "string" && config.image_idr.trim()) {
+    return config.image_idr;
+  }
+  if (config && typeof config.image_id === "string" && config.image_id.trim()) {
+    return config.image_id;
+  }
+  const payloadImage = props.details?.payload?.image;
+  if (typeof payloadImage === "string" && payloadImage.trim()) {
+    return payloadImage;
+  }
+  return "-";
+});
 </script>
