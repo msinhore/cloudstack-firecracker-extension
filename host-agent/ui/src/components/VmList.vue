@@ -59,7 +59,7 @@
             :details="detailsMap[vm.name]"
             :loading="Boolean(detailsLoading[vm.name])"
             :error="detailsError[vm.name]"
-            @retry="loadDetails(vm.name, true)"
+            @retry="retryDetails(vm.name)"
           />
         </div>
       </transition>
@@ -69,10 +69,10 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
-import axios from "axios";
 import VmDetails from "./VmDetails.vue";
+import { api } from "../services/apiClient";
 
-const emit = defineEmits(["update-timestamp"]);
+const emit = defineEmits(["update-timestamp", "auth-required"]);
 
 const loading = ref(false);
 const errorMessage = ref("");
@@ -103,7 +103,7 @@ const fetchVms = async () => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    const { data } = await axios.get("/v1/vms");
+    const { data } = await api.get("/v1/vms");
     const entries = Array.isArray(data?.vms) ? data.vms : [];
     vms.value = entries.map((entry) => ({
       name: entry.name,
@@ -115,17 +115,29 @@ const fetchVms = async () => {
     emit("update-timestamp", Date.now());
   } catch (error) {
     console.error("Failed to fetch VM list", error);
-    errorMessage.value = error?.response?.data?.detail || error?.message || "Failed to fetch VM list.";
+    if (error?.response?.status === 401) {
+      errorMessage.value = "Authentication required.";
+      emit("auth-required", "Authentication required.");
+    } else {
+      errorMessage.value = error?.response?.data?.detail || error?.message || "Failed to fetch VM list.";
+    }
+    throw error;
   } finally {
     loading.value = false;
   }
 };
 
 const refresh = () => {
-  fetchVms();
-  expanded.value.forEach((vmName) => {
-    loadDetails(vmName, true);
+  const promise = fetchVms();
+  promise.catch(() => {
+    // handled via auth-required emit or error message
   });
+  expanded.value.forEach((vmName) => {
+    loadDetails(vmName, true).catch(() => {
+      /* errors handled per-call */
+    });
+  });
+  return promise;
 };
 
 const toggle = (vmName) => {
@@ -134,7 +146,9 @@ const toggle = (vmName) => {
   } else {
     expanded.value = [...expanded.value, vmName];
     if (!detailsMap[vmName] && !detailsLoading[vmName]) {
-      loadDetails(vmName);
+      loadDetails(vmName).catch(() => {
+        /* handled in loadDetails */
+      });
     }
   }
 };
@@ -148,15 +162,27 @@ const loadDetails = async (vmName, force = false) => {
   detailsLoading[vmName] = true;
   detailsError[vmName] = "";
   try {
-    const { data } = await axios.get(`/v1/vms/${encodeURIComponent(vmName)}/details`);
+    const { data } = await api.get(`/v1/vms/${encodeURIComponent(vmName)}/details`);
     detailsMap[vmName] = data;
   } catch (error) {
     console.error(`Failed to fetch details for VM ${vmName}`, error);
-    detailsError[vmName] =
-      error?.response?.data?.detail || error?.message || "Failed to load VM details. Click refresh to retry.";
+    if (error?.response?.status === 401) {
+      emit("auth-required", "Authentication required.");
+      detailsError[vmName] = "Authentication required.";
+    } else {
+      detailsError[vmName] =
+        error?.response?.data?.detail || error?.message || "Failed to load VM details. Click refresh to retry.";
+    }
+    throw error;
   } finally {
     detailsLoading[vmName] = false;
   }
+};
+
+const retryDetails = (vmName) => {
+  loadDetails(vmName, true).catch(() => {
+    /* handled in loadDetails */
+  });
 };
 
 const filteredVms = computed(() => {
@@ -175,8 +201,14 @@ const filteredVms = computed(() => {
 });
 
 onMounted(() => {
-  fetchVms();
-  intervalHandle = window.setInterval(fetchVms, 30000);
+  fetchVms().catch(() => {
+    /* auth handled upstream */
+  });
+  intervalHandle = window.setInterval(() => {
+    fetchVms().catch(() => {
+      /* auth handled upstream */
+    });
+  }, 30000);
 });
 
 onBeforeUnmount(() => {
@@ -184,6 +216,8 @@ onBeforeUnmount(() => {
     window.clearInterval(intervalHandle);
   }
 });
+
+defineExpose({ refresh });
 </script>
 
 <style scoped>
