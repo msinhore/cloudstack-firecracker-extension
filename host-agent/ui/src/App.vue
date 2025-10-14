@@ -27,11 +27,16 @@
                   ({{ hostSummary.fqdn }})
                 </span>
               </div>
-              <div v-if="primaryAddress" class="host-address">
-                <span class="glyphicon glyphicon-map-marker" aria-hidden="true"></span>
-                <span>{{ primaryAddress.address }} · {{ primaryAddress.interface }}</span>
+              <div class="host-addresses">
+                <template v-if="hostInterfaces.length">
+                  <span v-for="iface in hostInterfaces" :key="iface.name" class="host-address-chip">
+                    <strong>{{ iface.name }}</strong>
+                    <span v-if="iface.mac" class="host-address-mac">· {{ iface.mac }}</span>
+                    <span>· {{ iface.labels.join(', ') }}</span>
+                  </span>
+                </template>
+                <span v-else class="host-address muted">No IP address detected</span>
               </div>
-              <div v-else class="host-address muted">No IP address detected</div>
             </div>
 
             <div class="host-stat-grid">
@@ -49,17 +54,6 @@
               </div>
             </div>
 
-            <div v-if="hostInterfaces.length" class="host-interfaces">
-              <div v-for="iface in hostInterfaces" :key="iface.name" class="host-interface">
-                <div class="iface-name">
-                  {{ iface.name }}
-                  <span v-if="iface.mac" class="iface-mac">· {{ iface.mac }}</span>
-                </div>
-                <div class="iface-addresses">
-                  {{ iface.labels.join(", ") }}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </header>
@@ -304,7 +298,7 @@ watch(
   min-width: 240px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .host-heading {
@@ -321,12 +315,30 @@ watch(
   font-size: 13px;
 }
 
-.host-address {
+.host-addresses {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
+}
+
+.host-address-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.host-address-chip strong {
+  text-transform: lowercase;
+}
+
+.host-address-mac {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .host-address.muted {
@@ -360,41 +372,6 @@ watch(
   font-size: 15px;
   font-weight: 500;
   color: #ffffff;
-}
-
-.host-interfaces {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.host-interface {
-  background: rgba(0, 0, 0, 0.24);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.iface-name {
-  font-weight: 600;
-  color: #ffffff;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: baseline;
-}
-
-.iface-mac {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.iface-addresses {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
 }
 
 @media (max-width: 768px) {
