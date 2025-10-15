@@ -1,3 +1,12 @@
+firecracker-cloudstack-agent (0.3.1-1) unstable; urgency=medium
+
+  * Make the embedded UI configurable (enable/disable + session timeout) via
+    firecracker-agent.json and expose the effective values over /v1/ui/config.
+  * Add automatic session expiry handling in the Vue frontend and redirect the
+    root path to /ui when the UI is enabled.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Wed, 15 Oct 2025 19:44:44 +0000
+
 firecracker-cloudstack-agent (0.3.0-1) unstable; urgency=medium
 
   * Added a Vue-based host dashboard served from the agent (/ui) with 
