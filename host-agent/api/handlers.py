@@ -29,12 +29,31 @@ logger = logging.getLogger("fc-agent")
 
 class APIHandlers:
 
-    def __init__(self, agent_defaults: Dict[str, Any]):
+    def __init__(self, agent_defaults: Dict[str, Any], ui_config: Optional[Dict[str, Any]] = None):
         self.agent_defaults = agent_defaults
+        self.ui_config = ui_config or {"enabled": True, "session_timeout_seconds": 1800}
         self.vm_manager = VMManager()
         self.vm_lifecycle = VMLifecycle(agent_defaults)
         self.config_manager = ConfigManager(agent_defaults)
         self.state_manager = StateManager(agent_defaults)
+
+    def v1_ui_config(self) -> Dict[str, Any]:
+        cfg = self.ui_config or {}
+        enabled = bool(cfg.get("enabled", True))
+        timeout = cfg.get("session_timeout_seconds", 1800)
+        try:
+            timeout = int(timeout)
+        except (TypeError, ValueError):
+            timeout = 1800
+        if timeout < 0:
+            timeout = 0
+        return {
+            "status": "success",
+            "config": {
+                "enabled": enabled,
+                "session_timeout_seconds": timeout,
+            },
+        }
 
     def api_create(self, req: SpecRequest) -> Dict[str, Any]:
         """Prepare storage+network, write config and start the VM."""

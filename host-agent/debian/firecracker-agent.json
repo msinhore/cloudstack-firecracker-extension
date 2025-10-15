@@ -32,5 +32,9 @@
   "auth": {
     "enabled": true,
     "service": "firecracker-agent"
+  },
+  "ui": {
+    "enabled": true,
+    "session_timeout_seconds": 1800
   }
 }

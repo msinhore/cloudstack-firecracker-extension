@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import LoginPage from "./components/LoginPage.vue";
 import VmList from "./components/VmList.vue";
 import { api, clearAuth, loadAuthFromStorage, setBasicAuth } from "./services/apiClient";
@@ -77,6 +77,11 @@ const loginLoading = ref(false);
 const isAuthenticated = ref(false);
 const vmListRef = ref(null);
 const hostSummary = ref(null);
+const uiConfig = ref({
+  enabled: true,
+  session_timeout_seconds: 0,
+});
+let sessionExpiryHandle = null;
 
 const updateTimestamp = (value) => {
   lastUpdated.value = value;
@@ -94,6 +99,7 @@ const handleAuthRequired = (message) => {
   clearAuth();
   setAuthState(false);
   loginLoading.value = false;
+  clearSessionExpiry();
   hostSummary.value = null;
   if (typeof message === "string" && message.trim()) {
     loginError.value = message;
@@ -119,6 +125,7 @@ const handleLoginSubmit = async ({ username, password }) => {
     setBasicAuth(username, password);
     await api.get("/v1/vms");
     setAuthState(true);
+    scheduleSessionExpiry();
     await fetchHostSummary();
   } catch (error) {
     clearAuth();
@@ -134,6 +141,7 @@ const handleLoginSubmit = async ({ username, password }) => {
 };
 
 const handleLogout = () => {
+  clearSessionExpiry();
   clearAuth();
   setAuthState(false);
   loginError.value = "";
@@ -144,15 +152,6 @@ const lastUpdatedLabel = computed(() => {
     return "never";
   }
   return new Date(lastUpdated.value).toLocaleString();
-});
-
-const primaryAddress = computed(() => {
-  const addresses = hostSummary.value?.ip_addresses;
-  if (!Array.isArray(addresses) || addresses.length === 0) {
-    return null;
-  }
-  const primary = addresses.find((entry) => entry.family === "IPv4" && !entry.is_loopback);
-  return primary || addresses[0];
 });
 
 const cpuLabel = computed(() => {
@@ -191,6 +190,11 @@ const diskLabel = computed(() => {
   }
   const gib = totalBytes / 1024 ** 3;
   return `${gib.toFixed(1)} GiB`;
+});
+
+const sessionTimeoutSeconds = computed(() => {
+  const raw = Number(uiConfig.value?.session_timeout_seconds ?? 0);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
 });
 
 const isBridgeInterface = (name) => {
@@ -255,7 +259,48 @@ const hostInterfaces = computed(() => {
     .sort((a, b) => a.name.localeCompare(b.name));
 });
 
+const loadUiConfig = async () => {
+  try {
+    const { data } = await api.get("/v1/ui/config");
+    const payload = (data && data.config) || data || {};
+    const timeoutSeconds = Number(payload.session_timeout_seconds ?? 0);
+    uiConfig.value = {
+      enabled: payload.enabled !== false,
+      session_timeout_seconds: Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds : 0,
+    };
+  } catch (error) {
+    console.warn("Failed to load UI configuration", error);
+  }
+};
+
+const clearSessionExpiry = () => {
+  if (sessionExpiryHandle !== null) {
+    window.clearTimeout(sessionExpiryHandle);
+    sessionExpiryHandle = null;
+  }
+};
+
+const handleSessionExpired = () => {
+  clearSessionExpiry();
+  loginError.value = "Session expired. Please sign in again.";
+  clearAuth();
+  setAuthState(false);
+};
+
+const scheduleSessionExpiry = () => {
+  clearSessionExpiry();
+  const seconds = sessionTimeoutSeconds.value;
+  if (!seconds) {
+    return;
+  }
+  sessionExpiryHandle = window.setTimeout(() => {
+    handleSessionExpired();
+  }, seconds * 1000);
+};
 onMounted(() => {
+  loadUiConfig().catch(() => {
+    /* optional */
+  });
   const restored = loadAuthFromStorage();
   setAuthState(restored);
   if (!restored) {
@@ -271,16 +316,35 @@ watch(
   () => isAuthenticated.value,
   (value) => {
     if (value) {
+      scheduleSessionExpiry();
       if (!hostSummary.value) {
         fetchHostSummary().catch(() => {
           /* non-fatal */
         });
       }
     } else {
+      clearSessionExpiry();
       hostSummary.value = null;
     }
   }
 );
+
+watch(
+  () => sessionTimeoutSeconds.value,
+  (seconds) => {
+    if (!seconds) {
+      clearSessionExpiry();
+      return;
+    }
+    if (isAuthenticated.value) {
+      scheduleSessionExpiry();
+    }
+  }
+);
+
+onBeforeUnmount(() => {
+  clearSessionExpiry();
+});
 </script>
 
 <style scoped>

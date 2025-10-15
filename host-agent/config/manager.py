@@ -80,6 +80,30 @@ class ConfigManager:
             for key in ["host", "storage", "net"]:
                 if key not in cfg["defaults"] or not isinstance(cfg["defaults"][key], dict):
                     cfg["defaults"][key] = {}
+        # Normalize UI configuration
+        ui_cfg = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
+        enabled = ui_cfg.get("enabled")
+        if enabled is None:
+            enabled = True
+        else:
+            enabled = bool(enabled)
+        timeout_seconds = 1800
+        if "session_timeout_seconds" in ui_cfg:
+            try:
+                timeout_seconds = int(ui_cfg.get("session_timeout_seconds", 1800))
+            except (TypeError, ValueError):
+                timeout_seconds = 1800
+        elif "session_timeout_minutes" in ui_cfg:
+            try:
+                timeout_seconds = int(ui_cfg.get("session_timeout_minutes", 30)) * 60
+            except (TypeError, ValueError):
+                timeout_seconds = 1800
+        if timeout_seconds < 0:
+            timeout_seconds = 0
+        cfg["ui"] = {
+            "enabled": enabled,
+            "session_timeout_seconds": timeout_seconds,
+        }
         return cfg
 
     def write_config(self, spec: Spec, paths: Paths) -> None:

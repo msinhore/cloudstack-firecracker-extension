@@ -29,7 +29,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse
 
 from api import register_routes
 from cli import CLICommands
@@ -57,6 +57,7 @@ AUTH_DEPENDENCY = None
 TLS_OPTIONS: Dict[str, Any] = {}
 IS_API_MODE = True
 UI_STATIC_MOUNTED = False
+UI_CONFIG: Dict[str, Any] = {"enabled": True, "session_timeout_seconds": 1800}
 # Initialize FastAPI app
 app = FastAPI(title="Firecracker Agent", version="1.0.0")
 
@@ -126,6 +127,25 @@ def _build_tls_options(security_cfg: Any) -> Dict[str, Any]:
         client_auth,
     )
     return options
+
+
+def _configure_ui_settings(ui_cfg: Any) -> None:
+    """Normalize UI configuration defaults."""
+    global UI_CONFIG
+    enabled = True
+    timeout_seconds = 1800
+    if isinstance(ui_cfg, dict):
+        enabled = bool(ui_cfg.get("enabled", True))
+        try:
+            timeout_seconds = int(ui_cfg.get("session_timeout_seconds", timeout_seconds))
+        except (TypeError, ValueError):
+            timeout_seconds = 1800
+        if timeout_seconds < 0:
+            timeout_seconds = 0
+    UI_CONFIG = {
+        "enabled": enabled,
+        "session_timeout_seconds": timeout_seconds,
+    }
 
 
 def _mount_ui_static_if_available() -> None:
@@ -198,11 +218,17 @@ async def startup_event():
 
     # Apply logging configuration
     _apply_logging_from_cfg(AGENT_CFG)
+    # Configure optional features
+    _configure_ui_settings(AGENT_CFG.get("ui"))
+
     # Register API routes with loaded configuration
     if AUTH_DEPENDENCY is None:
         AUTH_DEPENDENCY = _configure_auth_dependency(AGENT_CFG.get("auth", {}))
-    register_routes(app, AGENT_DEFAULTS, AUTH_DEPENDENCY)
-    _mount_ui_static_if_available()
+    register_routes(app, AGENT_DEFAULTS, AUTH_DEPENDENCY, UI_CONFIG)
+    if UI_CONFIG.get("enabled"):
+        _mount_ui_static_if_available()
+    else:
+        logger.info("UI disabled via configuration; static assets will not be served.")
     # Initialize VM lifecycle for recovery
     vm_lifecycle = VMLifecycle(AGENT_DEFAULTS)
     vm_lifecycle.startup_vm_recovery()
@@ -230,6 +256,8 @@ async def shutdown_event():
 # Root endpoint
 @app.get("/", include_in_schema=False)
 def root():
+    if UI_CONFIG.get("enabled"):
+        return RedirectResponse(url="/ui", status_code=302)
     return root_ok()
 
 

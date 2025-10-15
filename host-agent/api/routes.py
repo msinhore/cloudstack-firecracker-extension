@@ -13,9 +13,10 @@ def register_routes(
     app: FastAPI,
     agent_defaults: Dict[str, Any],
     auth_dependency: Optional[Any] = None,
+    ui_config: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Register all API routes with the FastAPI application."""
-    handlers = APIHandlers(agent_defaults)
+    handlers = APIHandlers(agent_defaults, ui_config=ui_config)
     deps = [Depends(auth_dependency)] if auth_dependency else []
     protected = {"dependencies": deps} if deps else {}
 
@@ -39,6 +40,10 @@ def register_routes(
     @app.get("/v1/config/effective", **protected)
     def v1_config_effective():
         return handlers.v1_config_effective()
+
+    @app.get("/v1/ui/config")
+    def v1_ui_config():
+        return handlers.v1_ui_config()
 
     # VM management endpoints
     @app.post("/v1/vms", status_code=201, **protected)
