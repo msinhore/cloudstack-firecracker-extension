@@ -1,4 +1,4 @@
-firecracker-cloudstack-agent (0.3.1-2) unstable; urgency=medium
+firecracker-cloudstack-agent (0.3.2-1) unstable; urgency=medium
 
   * Fix VM provisioning to honor `maxRam` from CloudStack payloads when
     generating Firecracker configs.
