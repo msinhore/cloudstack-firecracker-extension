@@ -78,10 +78,10 @@
               <td>Interfaces</td>
               <td>
                 <div v-if="networkInterfaces.length === 0">No interfaces discovered</div>
-                <div v-for="iface in networkInterfaces" :key="iface.iface_id" style="margin-bottom: 6px">
-                  <strong>{{ iface.iface_id || "eth" }}</strong>
-                  · MAC {{ iface.guest_mac || "-" }}
-                  <span v-if="iface.host_dev_name">· tap {{ iface.host_dev_name }}</span>
+                <div v-for="iface in networkInterfaces" :key="iface.iface_id" class="iface-block">
+                  <div><strong>{{ iface.iface_id || "eth" }}</strong></div>
+                  <div>MAC {{ iface.guest_mac || "-" }}</div>
+                  <div v-if="iface.host_dev_name">tap {{ iface.host_dev_name }}</div>
                 </div>
               </td>
             </tr>
@@ -91,7 +91,7 @@
             </tr>
             <tr>
               <td>Uplink</td>
-              <td>{{ details.payload?.uplink || details.network?.saved_config?.uplink || "-" }}</td>
+              <td>{{ details.network?.uplink || details.payload?.uplink || details.network?.saved_config?.uplink || "-" }}</td>
             </tr>
           </tbody>
         </table>
@@ -215,3 +215,14 @@ const originImageLabel = computed(() => {
   return `${sanitizedBase}/${imageToken}`;
 });
 </script>
+
+<style scoped>
+.iface-block {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.iface-block:last-child {
+  margin-bottom: 0;
+}
+</style>

@@ -226,6 +226,8 @@ class ConfigManager:
             "vm_name": spec.vm.name,
             "driver": spec.net.driver,
             "bridge": spec.net.bridge,
+            "host_bridge": getattr(spec.net, "host_bridge", ""),
+            "uplink": getattr(spec.net, "uplink", ""),
             "nics": [],
         }
         for nic in spec.vm.nics:

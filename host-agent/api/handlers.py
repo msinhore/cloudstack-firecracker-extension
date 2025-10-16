@@ -349,6 +349,12 @@ class APIHandlers:
         network_info: Dict[str, Any] = {"interfaces": network_interfaces}
         if saved_network_cfg:
             network_info["saved_config"] = saved_network_cfg
+            if "uplink" in saved_network_cfg and saved_network_cfg["uplink"]:
+                network_info["uplink"] = saved_network_cfg["uplink"]
+        if "uplink" not in network_info or not network_info.get("uplink"):
+            default_uplink = self.agent_defaults.get("net", {}).get("uplink")
+            if default_uplink:
+                network_info["uplink"] = default_uplink
 
         vm_config = {
             "cpus": machine_cfg.get("vcpu_count"),

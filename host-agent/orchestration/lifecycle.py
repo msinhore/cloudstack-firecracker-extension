@@ -5,6 +5,7 @@ VM Lifecycle module for Firecracker Agent.
 This module handles VM recovery, discovery, and startup operations.
 """
 import logging
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -152,7 +153,22 @@ class VMLifecycle:
                 try:
                     # Get VM status
                     status = self._get_vm_status_by_name(vm_name)
-                    vm_info = {"name": vm_name, "status": status, "config_file": str(config_file)}
+                    memory_mib = None
+                    try:
+                        with config_file.open("r", encoding="utf-8") as cfg_fp:
+                            config_data = json.load(cfg_fp)
+                        machine_cfg = config_data.get("machine-config")
+                        if isinstance(machine_cfg, dict):
+                            memory_mib = machine_cfg.get("mem_size_mib")
+                    except Exception:
+                        memory_mib = None
+                    vm_info = {
+                        "name": vm_name,
+                        "status": status,
+                        "config_file": str(config_file),
+                    }
+                    if memory_mib:
+                        vm_info["memory_mib"] = memory_mib
                     discovered_vms.append(vm_info)
                 except Exception as e:
                     logger.warning("Failed to get status for VM %s: %s", vm_name, e)
