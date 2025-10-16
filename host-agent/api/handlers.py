@@ -554,10 +554,29 @@ class APIHandlers:
             )
             nics.append(nic)
         
+        def _safe_int(value, default):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        raw_cpus = vm_details.get("cpus", vm_details.get("cpu", 1))
+        cpus = _safe_int(raw_cpus, 1)
+        if cpus < 1:
+            cpus = 1
+
+        ram_bytes = _safe_int(vm_details.get("maxRam"), 0)
+        if ram_bytes <= 0:
+            ram_bytes = _safe_int(vm_details.get("minRam"), ram_bytes)
+        if ram_bytes <= 0:
+            ram_bytes = _safe_int(vm_details.get("memory"), ram_bytes)
+        if ram_bytes <= 0:
+            ram_bytes = 512 * 1024 * 1024
+
         vm = VMDetails(
             name=vm_details.get("name", "unknown"),
-            cpus=vm_details.get("cpu", 1),
-            minRam=vm_details.get("memory", 512) * 1024 * 1024,
+            cpus=cpus,
+            minRam=ram_bytes,
             nics=nics,
         )
         host = HostDetails(
@@ -593,10 +612,11 @@ class APIHandlers:
             kernel_dir = self.agent_defaults.get("host", {}).get("kernel_dir", "/var/lib/firecracker/kernel")
             kernel_path = f"{kernel_dir}/vmlinux.bin"  # Default kernel
         
+        mem_mib = max(1, (ram_bytes + (1024 * 1024 - 1)) // (1024 * 1024))
         vmext = VMExt(
             kernel=kernel_path,
             boot_args=vm_ext_details.get("boot_args", ""),
-            mem_mib=vm_details.get("memory", 512),
+            mem_mib=mem_mib,
             image=image_path,
         )
         storage_volume_dir = self.agent_defaults.get("storage", {}).get("volume_dir")

@@ -92,6 +92,39 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
 - **`auth`**
   - `enabled`: when true, all `/v1/*` routes require HTTP Basic credentials.
   - `service`: name of the PAM stack (populate `/etc/pam.d/firecracker-agent`). The package depends on `python3-pamela`.
+- **`ui`**
+  - `enabled`: set to `false` to disable the embedded Vue dashboard entirely. When `true`, the agent mounts static assets under `/ui` and automatically redirects `/` to that route.
+  - `session_timeout_seconds`: idle timeout advertised to the UI. After the specified number of seconds the browser clears stored credentials and the user must sign in again. Use `0` to disable automatic expiry (not recommended for shared workstations).
+  - The effective values are exposed via `GET /v1/ui/config`, allowing external tooling to inspect how the host is configured.
+
+### Configuration Reference
+
+| Section | Key | Type | Default | Description |
+| - | - | - | - | - |
+| root | `bind_host` | string | `0.0.0.0` | Interface where the FastAPI listener binds. Use `127.0.0.1` when fronting the agent with another proxy. |
+| root | `bind_port` | integer | `8080` | TCP port for the HTTPS/HTTP API. |
+| `defaults.host` | `firecracker_bin` | path | — | Absolute path to the Firecracker binary. Required. |
+| `defaults.host` | `kernel_dir` | path | `/var/lib/firecracker/kernel` | Directory containing guest kernels (`vmlinux`). |
+| `defaults.host` | `image_dir` | path | `/var/lib/firecracker/images` | Directory with root disk images referenced by templates. |
+| `defaults.host` | `conf_dir` | path | `/var/lib/firecracker/conf` | Location where rendered Firecracker JSON configs are persisted. |
+| `defaults.host` | `run_dir` | path | `/var/run/firecracker` | Runtime sockets, PID files, and recovered network configs. |
+| `defaults.host` | `log_dir` | path | `/var/log/firecracker` | Folder for Firecracker stdout/stderr logs. |
+| `defaults.host` | `payload_dir` | path | `/var/lib/firecracker/payload` | Storage for raw CloudStack payloads (`create-spec-*.json`). |
+| `defaults.storage` | `driver` | enum | `file` | Storage backend: `file`, `lvm`, or `lvmthin`. |
+| `defaults.storage` | `volume_dir` | path | `/var/lib/firecracker/volumes` | Base directory for volume files (required for `file` backend). |
+| `defaults.net` | `driver` | enum | `linux-bridge-vlan` | Network backend: `linux-bridge-vlan` or `ovs-vlan`. |
+| `defaults.net` | `host_bridge` | string | `cloudbr1` | Bridge (Linux or OVS) used to attach VM tap interfaces. |
+| `defaults.net` | `uplink` | string | — | Optional parent interface/uplink used by the backend. |
+| `security.tls` | `enabled` | boolean | `true` | Enables HTTPS for the API/UI. |
+| `security.tls` | `cert_file` | path | `/etc/cloudstack/tls-cert/server.crt` | Server certificate presented to clients. |
+| `security.tls` | `key_file` | path | `/etc/cloudstack/tls-cert/server.key` | Private key paired with `cert_file`. |
+| `security.tls` | `ca_file` | path | `/etc/cloudstack/tls-cert/ca.crt` | CA bundle for validating client certificates (mTLS). |
+| `security.tls` | `client_auth` | enum | `none` | TLS client-auth policy: `none`, `optional`, or `required`. |
+| `auth` | `enabled` | boolean | `true` | Toggles HTTP Basic authentication. |
+| `auth` | `service` | string | `firecracker-agent` | PAM service name used to validate credentials. |
+| `ui` | `enabled` | boolean | `true` | Controls whether the Vue dashboard is served under `/ui` and `/` redirects. |
+| `ui` | `session_timeout_seconds` | integer | `1800` | Idle timeout advertised to the UI; `0` disables automatic logout. |
+| `logging` | `level` | enum | `INFO` | Optional override for the agent logger level (`DEBUG`, `INFO`, etc.). |
 
 ### mTLS Configuration Guide
 1. **Generate a CA, server, and client certificate**
