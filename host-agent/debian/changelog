@@ -1,3 +1,14 @@
+firecracker-cloudstack-agent (0.4.0-1) unstable; urgency=medium
+
+  * Add a VNC console bridge leveraging Xvfb/xterm/x11vnc and expose it via
+    the new `/v1/vms/{name}/console` API endpoints.
+  * Extend the firecracker.py client with a `console` action and update the
+    documentation with instructions for integrating the console proxy.
+  * Ship the new console manager module in the Debian package and pull in the
+    required x11vnc/xterm/xvfb packages as dependencies.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Fri, 17 Oct 2025 10:15:00 +0000
+
 firecracker-cloudstack-agent (0.3.2-1) unstable; urgency=medium
 
   * Fix VM provisioning to honor `maxRam` from CloudStack payloads when

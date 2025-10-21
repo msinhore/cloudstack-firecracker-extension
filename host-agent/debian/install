@@ -24,6 +24,7 @@ host-agent/utils/auth.py                            usr/lib/firecracker-cloudsta
 host-agent/utils/validation.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/filesystem.py                      usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/utils/tmux.py                            usr/lib/firecracker-cloudstack-agent/utils/
+host-agent/utils/vnc_console.py                     usr/lib/firecracker-cloudstack-agent/utils/
 host-agent/tools/fc_shutdown_service.py             usr/lib/firecracker-cloudstack-agent/tools/
 host-agent/api/__init__.py                          usr/lib/firecracker-cloudstack-agent/api/
 host-agent/api/handlers.py                          usr/lib/firecracker-cloudstack-agent/api/

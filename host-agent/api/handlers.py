@@ -23,6 +23,7 @@ from orchestration import VMLifecycle, VMManager
 from state import StateManager
 from utils.filesystem import paths
 from utils.validation import validate_name
+from utils.vnc_console import VNCConsoleManager
 
 logger = logging.getLogger("fc-agent")
 
@@ -36,6 +37,7 @@ class APIHandlers:
         self.vm_lifecycle = VMLifecycle(agent_defaults)
         self.config_manager = ConfigManager(agent_defaults)
         self.state_manager = StateManager(agent_defaults)
+        self.vnc_console = VNCConsoleManager(agent_defaults)
 
     def v1_ui_config(self) -> Dict[str, Any]:
         cfg = self.ui_config or {}
@@ -471,6 +473,40 @@ class APIHandlers:
             logger.exception("Reboot VM failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Reboot VM failed: {e}")
 
+    def v1_vm_console_start(self, vm_name: str) -> Dict[str, Any]:
+        """Start (or reuse) the VNC bridge for a VM console."""
+        try:
+            info = self.vnc_console.ensure_console(vm_name)
+            return {
+                "status": "success",
+                "message": f"VNC console ready for VM {vm_name}",
+                "vm_name": vm_name,
+                "host": info.get("host"),
+                "port": info.get("port"),
+                "password": info.get("password"),
+                "created_at": info.get("created_at"),
+            }
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to start VNC console for VM %s: %s", vm_name, exc)
+            raise HTTPException(status_code=500, detail=f"Failed to start VNC console: {exc}")
+
+    def v1_vm_console_stop(self, vm_name: str) -> Dict[str, Any]:
+        """Stop the VNC bridge for a VM console."""
+        try:
+            info = self.vnc_console.stop_console(vm_name)
+            if isinstance(info, dict) and "vm_name" not in info:
+                info["vm_name"] = vm_name
+            return info
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to stop VNC console for VM %s: %s", vm_name, exc)
+            raise HTTPException(status_code=500, detail=f"Failed to stop VNC console: {exc}")
+
     def v1_vm_start_by_name(self, vm_name: str, req: SpecRequest) -> Dict[str, Any]:
         """Start VM by name (uses existing config on disk)."""
         try:
@@ -504,6 +540,7 @@ class APIHandlers:
                 "/v1/vms/{name}/start",
                 "/v1/vms/{name}/stop",
                 "/v1/vms/{name}/reboot",
+                "/v1/vms/{name}/console",
                 "/v1/vms/{name}",
                 "/v1/vms/{name}/recover",
                 "/v1/vms/{name}/status",

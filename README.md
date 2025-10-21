@@ -215,6 +215,12 @@ sudo systemctl restart firecracker-cloudstack-agent.service
 - Each VM runs inside a detached tmux session named `fc-<vm_name>`; list active sessions with `tmux ls`.
 - Attach to the microVM console using `tmux attach -t fc-<vm_name>` and detach without stopping it via `Ctrl-b d`.
 - If a session is missing, the agent recreates it when the VM boots; use `tmux kill-session -t fc-<vm_name>` only for advanced troubleshooting.
+
+### VNC Console Bridge
+- `POST /v1/vms/{name}/console` spawns an `Xvfb` + `xterm` + `x11vnc` bridge bound to the VM's tmux session and returns `{host, port, password}` ready for the CloudStack console proxy. `DELETE /v1/vms/{name}/console` tears it down.
+- The CLI helper now supports `firecracker.py console <payload.json>` to fetch the same tuple programmatically.
+- Runtime assets live under `/var/run/firecracker/vnc/` (state JSON, password files). Adjust `defaults.console` in the agent config to tune port ranges, bind address, window geometry, fonts, or read-only mode.
+- Ensure the host has `x11vnc`, `xterm`, and `xvfb` installed; the Debian packaging pulls these dependencies.
 ---
 ## CloudStack Integration
 1. **Install extension on the management server**:

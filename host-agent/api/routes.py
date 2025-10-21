@@ -86,6 +86,14 @@ def register_routes(
     def v1_vm_recover_by_name(vm_name: str, req: Optional[SpecRequest] = None):
         return handlers.v1_vm_recover_by_name(vm_name, req)
 
+    @app.post("/v1/vms/{vm_name}/console", **protected)
+    def v1_vm_console_start(vm_name: str):
+        return handlers.v1_vm_console_start(vm_name)
+
+    @app.delete("/v1/vms/{vm_name}/console", **protected)
+    def v1_vm_console_stop(vm_name: str):
+        return handlers.v1_vm_console_stop(vm_name)
+
     # System management endpoints
     @app.post("/v1/graceful-shutdown", **protected)
     def v1_graceful_shutdown():

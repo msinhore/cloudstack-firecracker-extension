@@ -8,7 +8,7 @@ Build-Depends: debhelper-compat (= 13), nodejs, npm
 
 Package: firecracker-cloudstack-agent
 Architecture: all
-Depends: ${misc:Depends}, jq, curl, iproute2, bridge-utils, tmux, openssl, python3-pamela, python3-uvicorn, python3-psutil, python3-fastapi, python3-libtmux, python3-pyroute2, python3-typer, python3-openvswitch, python3-ovsdbapp
+Depends: ${misc:Depends}, jq, curl, iproute2, bridge-utils, tmux, openssl, python3-pamela, python3-uvicorn, python3-psutil, python3-fastapi, python3-libtmux, python3-pyroute2, python3-typer, python3-openvswitch, python3-ovsdbapp, x11vnc, xterm, xvfb
 Recommends: openvswitch-switch
 Description: Firecracker agent with pluggable storage and networking backends for CloudStack
  A local HTTP API/CLI to manage Firecracker microVMs with file/LVM/LVM-thin storage backends

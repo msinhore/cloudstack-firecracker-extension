@@ -18,6 +18,15 @@
     "net": {
       "driver": "linux-bridge-vlan",
       "host_bridge": "cloudbr1"
+    },
+    "console": {
+      "bind_host": "0.0.0.0",
+      "port_min": 5900,
+      "port_max": 5999,
+      "geometry": "1024x768x24",
+      "xterm_geometry": "132x44",
+      "font_family": "Monospace",
+      "font_size": 14
     }
   },
   "security": {

@@ -362,6 +362,12 @@ def op_recover(ctx):
     data = _json_or_fail(_req("POST", url, ctx.agent, json_body=payload))
     _ok(data)
 
+def op_console(ctx):
+    """POST /v1/vms/{name}/console — obtain VNC bridge connection info."""
+    url = f"{ctx.agent.base_url}/vms/{ctx.vm_name}/console"
+    data = _json_or_fail(_req("POST", url, ctx.agent))
+    _ok(data)
+
 # -------------------------- main --------------------------
 def main():
     """Parse CLI, build context, dispatch operation over HTTP."""
@@ -382,6 +388,7 @@ def main():
         "status": op_status,
         "state": op_status,
         "recover": op_recover,
+        "console": op_console,
     }
 
     if operation not in ops:
