@@ -13,6 +13,7 @@ import shlex
 import signal
 import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -90,6 +91,7 @@ class VNCConsoleManager:
         }
         self._write_state(vm_state_path, state)
         logger.debug("VNC console state stored for %s: %s", vm_name, state)
+        self._monitor_console(vm_name, state)
         return self._response_payload(state)
 
     def stop_console(self, vm_name: str) -> Dict[str, Any]:
@@ -187,6 +189,28 @@ class VNCConsoleManager:
                     (self.state_dir / f"{vm_name}{suffix}").unlink(missing_ok=True)
                 except Exception:
                     pass
+    def _monitor_console(self, vm_name: str, state: Dict[str, Any]) -> None:
+        def _watch():
+            x11_pid = state.get("x11vnc_pid")
+            if not x11_pid:
+                return
+            try:
+                proc = psutil.Process(int(x11_pid))
+                proc.wait()
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                pass
+            except Exception as exc:
+                logger.debug("Console watcher for %s encountered error: %s", vm_name, exc)
+            finally:
+                try:
+                    state_path = self._state_path(vm_name)
+                    if state_path.exists():
+                        self.stop_console(vm_name)
+                except Exception:
+                    logger.debug("Watcher cleanup for %s failed", vm_name, exc_info=True)
+
+        thread = threading.Thread(target=_watch, name=f"fc-vnc-watch-{vm_name}", daemon=True)
+        thread.start()
 
     def _allocate_port(self) -> int:
         family = socket.AF_INET6 if ":" in self.bind_host else socket.AF_INET
@@ -317,7 +341,7 @@ class VNCConsoleManager:
             str(port),
             "-rfbauth",
             str(password_file),
-            "-forever",
+            "-once",
             "-shared",
             "-noxdamage",
             "-nolookup",
