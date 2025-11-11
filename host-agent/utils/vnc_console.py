@@ -8,9 +8,10 @@ import json
 import logging
 import os
 import secrets
+import select
+import shlex
 import signal
 import socket
-import select
 import subprocess
 import time
 from pathlib import Path
@@ -41,7 +42,7 @@ class VNCConsoleManager:
         self.bind_host = console_defaults.get("bind_host") or "0.0.0.0"
         self.port_min = int(console_defaults.get("port_min", 5900))
         self.port_max = int(console_defaults.get("port_max", 5999))
-        self.geometry = console_defaults.get("geometry") or "1024x768x24"
+        self.geometry = console_defaults.get("geometry") or "1600x900x24"
         self.xterm_geometry = console_defaults.get("xterm_geometry") or "132x44"
         self.font_family = console_defaults.get("font_family") or "Monospace"
         self.font_size = int(console_defaults.get("font_size", 14))
@@ -55,9 +56,11 @@ class VNCConsoleManager:
         vm_state_path = self._state_path(vm_name)
         current_state = self._load_state(vm_state_path)
         if current_state and self._state_active(current_state):
+            logger.debug("Reusing existing VNC console for %s (state=%s)", vm_name, current_state)
             return self._response_payload(current_state)
 
         if current_state:
+            logger.debug("Cleaning up stale VNC console for %s", vm_name)
             self._cleanup_state(current_state)
 
         session_name = f"fc-{vm_name}"
@@ -68,9 +71,9 @@ class VNCConsoleManager:
         port = self._allocate_port()
         password = self._generate_password()
         password_file = self._write_password_file(vm_name, password)
-        display, xvfb_proc = self._start_xvfb()
+        display, xvfb_proc = self._start_xvfb(vm_name)
         xterm_proc = self._start_xterm(display, vm_name, session_name)
-        x11vnc_proc = self._start_x11vnc(display, port, password_file)
+        x11vnc_proc = self._start_x11vnc(vm_name, display, port, password_file)
 
         state = {
             "vm_name": vm_name,
@@ -86,6 +89,7 @@ class VNCConsoleManager:
             "session_name": session_name,
         }
         self._write_state(vm_state_path, state)
+        logger.debug("VNC console state stored for %s: %s", vm_name, state)
         return self._response_payload(state)
 
     def stop_console(self, vm_name: str) -> Dict[str, Any]:
@@ -94,6 +98,7 @@ class VNCConsoleManager:
         state = self._load_state(vm_state_path)
         if not state:
             return {"status": "success", "message": f"No VNC console running for {vm_name}", "vm_name": vm_name}
+        logger.debug("Stopping VNC console for %s (state=%s)", vm_name, state)
         self._cleanup_state(state)
         self._remove_state_file(vm_state_path)
         return {"status": "success", "message": f"VNC console stopped for {vm_name}", "vm_name": vm_name}
@@ -175,6 +180,13 @@ class VNCConsoleManager:
                 Path(password_file).unlink(missing_ok=True)
             except Exception:
                 pass
+        vm_name = state.get("vm_name")
+        if vm_name:
+            for suffix in (".xvfb.log", ".xterm.log", ".x11vnc.log"):
+                try:
+                    (self.state_dir / f"{vm_name}{suffix}").unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def _allocate_port(self) -> int:
         family = socket.AF_INET6 if ":" in self.bind_host else socket.AF_INET
@@ -205,55 +217,65 @@ class VNCConsoleManager:
         os.chmod(path, 0o600)
         return path
 
-    def _start_xvfb(self) -> Tuple[str, subprocess.Popen]:
-        cmd = ["Xvfb", "-screen", "0", self.geometry, "-nolisten", "tcp", "-displayfd", "1"]
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            close_fds=True,
-        )
+    def _start_xvfb(self, vm_name: str) -> Tuple[str, subprocess.Popen]:
+        display_read_fd, display_write_fd = os.pipe()
+        cmd = [
+            "Xvfb",
+            "-screen",
+            "0",
+            self.geometry,
+            "-nolisten",
+            "tcp",
+            "-displayfd",
+            str(display_write_fd),
+        ]
+        log_file = self.state_dir / f"{vm_name}.xvfb.log"
+        logger.debug("Starting Xvfb for %s with command: %s (log=%s)", vm_name, shlex.join(cmd), str(log_file))
+        with open(log_file, "w", encoding="utf-8") as log_fp:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_fp,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+                pass_fds=(display_write_fd,),
+            )
+        os.close(display_write_fd)
         display = ""
         deadline = time.time() + 2.0
-        if proc.stdout:
+        with os.fdopen(display_read_fd) as reader:
+            fd = reader.fileno()
             while time.time() < deadline:
                 try:
-                    rlist, _, _ = select.select([proc.stdout], [], [], 0.2)
+                    rlist, _, _ = select.select([fd], [], [], 0.2)
                 except Exception:
                     break
                 if rlist:
-                    try:
-                        line = proc.stdout.readline()
-                    except Exception:
-                        break
+                    line = reader.readline()
                     if not line:
                         break
                     display = line.strip()
                     break
-                if proc.poll() is not None:
-                    break
         if not display:
             if proc.poll() is not None:
-                stderr = ""
-                if proc.stderr:
-                    try:
-                        stderr = proc.stderr.read().strip()
-                    except Exception:
-                        pass
-                raise RuntimeError(f"Xvfb failed to start (exit={proc.returncode}): {stderr}")
-            raise RuntimeError("Xvfb did not report a display number within timeout")
+                raise RuntimeError(f"Xvfb failed to start (exit={proc.returncode}); see {log_file}")
+            raise RuntimeError(f"Xvfb did not report a display number within timeout; see {log_file}")
         if not display.startswith(":"):
             display = f":{display}"
+        logger.debug("Xvfb started for %s (pid=%s) with display %s", vm_name, proc.pid, display)
         return display, proc
 
     def _start_xterm(self, display: str, vm_name: str, session_name: str) -> subprocess.Popen:
         env = os.environ.copy()
         env["DISPLAY"] = display
+        log_file = self.state_dir / f"{vm_name}.xterm.log"
         cmd = [
             "xterm",
             "-geometry",
             self.xterm_geometry,
+            "-bg",
+            "black",
+            "-fg",
+            "white",
             "-T",
             f"Firecracker console: {vm_name}",
             "-fa",
@@ -268,12 +290,25 @@ class VNCConsoleManager:
         ]
         if self.read_only:
             cmd.extend(["-r"])
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        logger.debug("Starting xterm for %s with command: %s (log=%s)", vm_name, shlex.join(cmd), str(log_file))
+        log_fp = open(log_file, "w", encoding="utf-8")
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                env=env,
+                stdout=log_fp,
+                stderr=subprocess.STDOUT,
+                close_fds=True,
+            )
+        finally:
+            log_fp.close()
+        logger.debug("xterm started for %s (pid=%s, DISPLAY=%s)", vm_name, proc.pid, display)
         return proc
 
-    def _start_x11vnc(self, display: str, port: int, password_file: Path) -> subprocess.Popen:
+    def _start_x11vnc(self, vm_name: str, display: str, port: int, password_file: Path) -> subprocess.Popen:
         env = os.environ.copy()
         env["DISPLAY"] = display
+        log_file = self.state_dir / f"{vm_name}.x11vnc.log"
         cmd = [
             "x11vnc",
             "-display",
@@ -286,13 +321,25 @@ class VNCConsoleManager:
             "-shared",
             "-noxdamage",
             "-nolookup",
-            "-quiet",
-            "-scale",
-            "1x1",
+            "-o",
+            str(log_file),
         ]
         if self.bind_host not in ("127.0.0.1", "::1"):
             cmd.extend(["-listen", self.bind_host])
         else:
             cmd.append("-localhost")
+        logger.debug(
+            "Starting x11vnc for %s with command: %s (log=%s)",
+            vm_name,
+            shlex.join(cmd),
+            str(log_file),
+        )
         proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        logger.debug(
+            "x11vnc started for %s (pid=%s, DISPLAY=%s, port=%s)",
+            vm_name,
+            proc.pid,
+            display,
+            port,
+        )
         return proc

@@ -670,12 +670,22 @@ class APIHandlers:
         storage = StorageSpec(
             driver="file", volume_file=Path(storage_volume_dir) / f"{vm.name}.img"
         )
-        # Determine networking driver based on CloudStack networking configuration
-        # Default to linux-bridge-vlan for VLAN-based networking
-        net_driver = "linux-bridge-vlan"
-        net_bridge = self.agent_defaults.get("net", {}).get("host_bridge", "")
-        net_host_bridge = self.agent_defaults.get("net", {}).get("host_bridge", "")
-        net_uplink = self.agent_defaults.get("net", {}).get("uplink", "")
+        # Determine networking driver based on payload or agent defaults
+        net_defaults = self.agent_defaults.get("net", {}) or {}
+        net_payload = obj.get("net") or external_details.get("net") or {}
+
+        def _norm(value: Any, default: str = "") -> str:
+            if isinstance(value, str):
+                return value.strip()
+            if value is None:
+                return default
+            return str(value)
+
+        raw_driver = net_payload.get("driver") or net_defaults.get("driver") or "linux-bridge-vlan"
+        net_driver = _norm(raw_driver, "linux-bridge-vlan") or "linux-bridge-vlan"
+        net_bridge = _norm(net_payload.get("bridge"), net_defaults.get("bridge") or net_defaults.get("host_bridge", ""))
+        net_host_bridge = _norm(net_payload.get("host_bridge"), net_defaults.get("host_bridge", ""))
+        net_uplink = _norm(net_payload.get("uplink"), net_defaults.get("uplink", ""))
         net = NetSpec(driver=net_driver, bridge=net_bridge, nics=nics, host_bridge=net_host_bridge, uplink=net_uplink)
         return Spec(vm=vm, host=host, vmext=vmext, storage=storage, net=net)
 

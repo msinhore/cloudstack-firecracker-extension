@@ -1,3 +1,13 @@
+firecracker-cloudstack-agent (0.4.0-2) unstable; urgency=medium
+
+  * Fix network driver selection so CloudStack payloads/defaults can request
+    ovs-vlan instead of hardcoded linux-bridge-vlan.
+  * Improve the VNC console bridge (custom geometry, logging, color tweaks)
+    and ship a shell-based client helper (`firecracker.sh`) mirroring the
+    Proxmox extension workflow.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Tue, 11 Nov 2025 15:00:00 +0000
+
 firecracker-cloudstack-agent (0.4.0-1) unstable; urgency=medium
 
   * Add a VNC console bridge leveraging Xvfb/xterm/x11vnc and expose it via
@@ -8,6 +18,13 @@ firecracker-cloudstack-agent (0.4.0-1) unstable; urgency=medium
     required x11vnc/xterm/xvfb packages as dependencies.
 
  -- Marco Sinhoreli <msinhore@gmail.com>  Fri, 17 Oct 2025 10:15:00 +0000
+firecracker-cloudstack-agent (0.3.2-2) unstable; urgency=medium
+
+  * Hotfix: honor `net.driver` from CloudStack payloads or agent defaults
+    instead of hardcoding linux-bridge-vlan, so ovs-vlan deployments work
+    without manual patches on v0.3.2.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Tue, 11 Nov 2025 14:05:00 +0000
 
 firecracker-cloudstack-agent (0.3.2-1) unstable; urgency=medium
 
