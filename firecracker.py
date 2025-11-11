@@ -371,7 +371,28 @@ def op_console(ctx):
     resp_host = data.get("host")
     if console_host and (not resp_host or resp_host in {"0.0.0.0", "127.0.0.1", "::"}):
         data["host"] = console_host
-    _ok(data)
+    host = data.get("host")
+    port = data.get("port")
+    password = data.get("password")
+    if not host or not port or not password:
+        _fail("Agent response missing host/port/password for console")
+    try:
+        port_int = int(port)
+    except (TypeError, ValueError):
+        _fail(f"Invalid port value returned by agent: {port}")
+    console_obj = {
+        "host": host,
+        "port": port_int,
+        "password": password,
+        "protocol": "vnc",
+        "passwordonetimeuseonly": False,
+    }
+    response = {
+        "status": data.get("status", "success"),
+        "message": data.get("message", "Console ready"),
+        "console": console_obj,
+    }
+    _ok(response)
 
 # -------------------------- main --------------------------
 def main():
