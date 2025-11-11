@@ -389,6 +389,7 @@ def main():
         "state": op_status,
         "recover": op_recover,
         "console": op_console,
+        "getconsole": op_console,
     }
 
     if operation not in ops:
