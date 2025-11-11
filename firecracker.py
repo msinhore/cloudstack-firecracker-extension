@@ -59,6 +59,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+from urllib.parse import urlparse
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -136,6 +137,7 @@ class Agent(object):
         verify: Union[bool, str] = True,
         auth: Optional[HTTPBasicAuth] = None,
         cert: Optional[Union[str, tuple]] = None,
+        console_host: Optional[str] = None,
     ) -> None:
         self.base_url = base_url
         self.token = token
@@ -143,6 +145,7 @@ class Agent(object):
         self.verify = verify
         self.auth = auth
         self.cert = cert
+        self.console_host = console_host or ""
 
 class Ctx(object):
     """Execution context parsed from JSON + CLI timeout (Python 3.6 compatible)."""
@@ -181,14 +184,11 @@ def _to_ctx(config_path: str, timeout: int):
         token = token.strip() or None
 
     # If the provided URL already includes an explicit port, don't append another
-    if "://" in url:
-        # Extract the authority part after scheme:// and check for ':' in host:port
-        authority = url.split("://", 1)[1]
-        has_explicit_port = ":" in authority.split("/")[0]
-    else:
-        has_explicit_port = False
-        # If no scheme, assume http for completeness
+    if "://" not in url:
         url = f"http://{url}"
+    parsed = urlparse(url)
+    authority = parsed.netloc or ""
+    has_explicit_port = ":" in authority
 
     base_url = f"{url}/v1" if has_explicit_port else f"{url}:{port}/v1"
 
@@ -273,7 +273,8 @@ def _to_ctx(config_path: str, timeout: int):
     elif isinstance(client_key, str) and client_key:
         _fail("TLS client key provided but client certificate missing")
 
-    agent = Agent(base_url, token, int(timeout or 30), verify=verify, auth=auth, cert=cert)
+    console_host = (host.get("console_host") or parsed.hostname or "").strip()
+    agent = Agent(base_url, token, int(timeout or 30), verify=verify, auth=auth, cert=cert, console_host=console_host)
     return Ctx(data, vm_name, agent)
 
 # -------------------------- HTTP helpers --------------------------
@@ -366,6 +367,10 @@ def op_console(ctx):
     """POST /v1/vms/{name}/console — obtain VNC bridge connection info."""
     url = f"{ctx.agent.base_url}/vms/{ctx.vm_name}/console"
     data = _json_or_fail(_req("POST", url, ctx.agent))
+    console_host = getattr(ctx.agent, "console_host", "") or ""
+    resp_host = data.get("host")
+    if console_host and (not resp_host or resp_host in {"0.0.0.0", "127.0.0.1", "::"}):
+        data["host"] = console_host
     _ok(data)
 
 # -------------------------- main --------------------------
