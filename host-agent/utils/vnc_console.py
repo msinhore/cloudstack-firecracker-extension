@@ -137,6 +137,9 @@ class VNCConsoleManager:
             pass
 
     def _state_active(self, state: Dict[str, Any]) -> bool:
+        required_values = {"port": state.get("port"), "password": state.get("password")}
+        if not required_values["port"] or not required_values["password"]:
+            return False
         for key in ("xvfb_pid", "xterm_pid", "x11vnc_pid"):
             pid = state.get(key)
             if not pid:
