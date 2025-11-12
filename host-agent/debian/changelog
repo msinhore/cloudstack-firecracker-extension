@@ -1,9 +1,10 @@
 firecracker-cloudstack-agent (0.4.0-4) unstable; urgency=medium
 
-  * Ensure VNC console bridges shut down automatically when clients disconnect,
-    improve console output normalization for CloudStack, and support the
-    `getconsole` alias in the management script.
+  * Ensure the console endpoint always returns a valid host/port/password by
+    ignoring stale VNC states with missing credentials.
 
+ -- Marco Sinhoreli <msinhore@gmail.com>  Wed, 12 Nov 2025 14:00:00 +0000
+ 
 firecracker-cloudstack-agent (0.4.0-3) unstable; urgency=medium
 
   * Ensure VNC console bridges shut down automatically when clients disconnect,
