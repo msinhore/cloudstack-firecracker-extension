@@ -60,6 +60,9 @@ class StorageSpec:
 
     driver: str
     volume_file: str
+    vg: Optional[str] = None
+    thinpool: Optional[str] = None
+    size: Optional[int] = None
 
 
 @dataclasses.dataclass
