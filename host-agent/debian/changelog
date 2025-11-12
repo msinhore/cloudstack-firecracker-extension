@@ -1,9 +1,10 @@
-firecracker-cloudstack-agent (0.4.0-4) unstable; urgency=medium
+firecracker-cloudstack-agent (0.4.0-6) unstable; urgency=medium
 
-  * Ensure the console endpoint always returns a valid host/port/password by
-    ignoring stale VNC states with missing credentials.
+  * Ensure the console endpoint always returns host/port/password by ignoring
+    stale VNC states without credentials, and honor storage defaults so LVM
+    drivers are actually used.
 
- -- Marco Sinhoreli <msinhore@gmail.com>  Wed, 12 Nov 2025 14:00:00 +0000
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 13 Nov 2025 10:00:00 +0000
  
 firecracker-cloudstack-agent (0.4.0-3) unstable; urgency=medium
 
