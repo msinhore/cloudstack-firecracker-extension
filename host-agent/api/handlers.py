@@ -634,26 +634,22 @@ class APIHandlers:
         vm_ext_details = external_details.get("virtualmachine", {})
         image_name = vm_ext_details.get("image", "")
         
-        if image_name:
-            # Construct full path using image_dir and the image name from CloudStack
-            image_dir = self.agent_defaults.get("host", {}).get("image_dir", "/var/lib/firecracker/images")
-            image_path = f"{image_dir}/{image_name}"
-        else:
-            # Use a default image path from agent defaults
-            image_dir = self.agent_defaults.get("host", {}).get("image_dir", "/var/lib/firecracker/images")
-            image_path = f"{image_dir}/ubuntu-20.04.img"  # Default image
+        image_dir = self.agent_defaults.get("host", {}).get("image_dir", "/var/lib/firecracker/images")
+        image_path = f"{image_dir}/{image_name}" if image_name else None
+        if image_path is None:
+            raise HTTPException(status_code=400, detail="Image not specified in payload (externaldetails.virtualmachine.image)")
+        if not Path(image_path).exists():
+            raise HTTPException(status_code=404, detail=f"Image not found: {image_path}")
         
         # Get kernel path from externaldetails.virtualmachine.kernel or use a default
         kernel_name = vm_ext_details.get("kernel", "")
         
-        if kernel_name:
-            # Construct full path using kernel_dir and the kernel name from CloudStack
-            kernel_dir = self.agent_defaults.get("host", {}).get("kernel_dir", "/var/lib/firecracker/kernel")
-            kernel_path = f"{kernel_dir}/{kernel_name}"
-        else:
-            # Use a default kernel path from agent defaults
-            kernel_dir = self.agent_defaults.get("host", {}).get("kernel_dir", "/var/lib/firecracker/kernel")
-            kernel_path = f"{kernel_dir}/vmlinux.bin"  # Default kernel
+        kernel_dir = self.agent_defaults.get("host", {}).get("kernel_dir", "/var/lib/firecracker/kernel")
+        if not kernel_name:
+            raise HTTPException(status_code=400, detail="Kernel not specified in payload (externaldetails.virtualmachine.kernel)")
+        kernel_path = f"{kernel_dir}/{kernel_name}"
+        if not Path(kernel_path).exists():
+            raise HTTPException(status_code=404, detail=f"Kernel not found: {kernel_path}")
         
         mem_mib = max(1, (ram_bytes + (1024 * 1024 - 1)) // (1024 * 1024))
         vmext = VMExt(
