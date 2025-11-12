@@ -367,6 +367,18 @@ def op_console(ctx):
     """POST /v1/vms/{name}/console — obtain VNC bridge connection info."""
     url = f"{ctx.agent.base_url}/vms/{ctx.vm_name}/console"
     data = _json_or_fail(_req("POST", url, ctx.agent))
+    console_obj = data.get("console")
+    if isinstance(console_obj, dict):
+        host = console_obj.get("host")
+        port = console_obj.get("port")
+        password = console_obj.get("password")
+        if host and port and password:
+            try:
+                console_obj["port"] = int(port)
+            except (TypeError, ValueError):
+                _fail(f"Invalid port value returned by agent: {port}")
+            _ok(data)
+        # fallthrough if malformed
     console_host = getattr(ctx.agent, "console_host", "") or ""
     resp_host = data.get("host")
     if console_host and (not resp_host or resp_host in {"0.0.0.0", "127.0.0.1", "::"}):
