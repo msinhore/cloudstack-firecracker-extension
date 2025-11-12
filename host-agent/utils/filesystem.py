@@ -53,11 +53,19 @@ def paths_by_name(vm_name: str) -> Paths:
     conf_dir = Path(host_defaults.get("conf_dir", "/etc/cloudstack/firecracker"))
     run_dir = Path(host_defaults.get("run_dir", "/var/run/firecracker"))
     log_dir = Path(host_defaults.get("log_dir", "/var/log/firecracker"))
-    volume_dir = storage_defaults.get("volume_dir")
-    if isinstance(volume_dir, str) and volume_dir.strip():
-        volume_file = Path(volume_dir) / f"{vm_name}.img"
+    driver = (storage_defaults.get("driver") or "file").lower()
+    if driver == "lvmthin" or driver == "lvm":
+        vg = storage_defaults.get("volume_group") or storage_defaults.get("vg")
+        if vg:
+            volume_file = Path(f"/dev/{vg}/vm-{vm_name}")
+        else:
+            volume_file = Path("/dev") / f"vm-{vm_name}"
     else:
-        volume_file = Path("/tmp") / f"{vm_name}.img"
+        volume_dir = storage_defaults.get("volume_dir")
+        if isinstance(volume_dir, str) and volume_dir.strip():
+            volume_file = Path(volume_dir) / f"{vm_name}.img"
+        else:
+            volume_file = Path("/tmp") / f"{vm_name}.img"
     return Paths(
         volume_file=volume_file,
         config_file=conf_dir / f"{vm_name}.json",

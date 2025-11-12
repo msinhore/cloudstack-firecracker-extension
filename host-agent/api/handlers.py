@@ -683,27 +683,28 @@ class APIHandlers:
         driver = (storage_defaults.get("driver") or "file").lower()
         volume_dir = storage_defaults.get("volume_dir", "/var/lib/firecracker/volumes")
         size = storage_defaults.get("size")
-
-        spec = StorageSpec(driver=driver, volume_file=str(Path(volume_dir) / f"{vm.name}.img"), size=size)
+        lv_name = f"vm-{vm.name}"
 
         if driver == "lvm":
             vg = storage_defaults.get("volume_group") or storage_defaults.get("vg")
             if not vg:
                 raise HTTPException(status_code=500, detail="storage.volume_group required for lvm")
-            spec.vg = vg
-            return spec
+            dev_path = f"/dev/{vg}/{lv_name}"
+            return StorageSpec(driver="lvm", volume_file=dev_path, vg=vg, size=size)
 
         if driver == "lvmthin":
             vg = storage_defaults.get("volume_group") or storage_defaults.get("vg")
             pool = storage_defaults.get("thinpool")
             if not vg or not pool:
                 raise HTTPException(status_code=500, detail="storage.volume_group and storage.thinpool required for lvmthin")
-            spec.vg = vg
-            spec.thinpool = pool
-            return spec
+            dev_path = f"/dev/{vg}/{lv_name}"
+            return StorageSpec(driver="lvmthin", volume_file=dev_path, vg=vg, thinpool=pool, size=size)
 
-        spec.driver = "file"
-        return spec
+        return StorageSpec(
+            driver="file",
+            volume_file=str(Path(volume_dir) / f"{vm.name}.img"),
+            size=size,
+        )
 
     def _cfg_to_spec(self, cfg: Dict[str, Any], vm_name: str) -> Spec:
         """Convert configuration to Spec object."""
