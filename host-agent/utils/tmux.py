@@ -39,7 +39,7 @@ class TmuxManager:
         """Create a detached tmux session running the provided command, avoiding deprecated libtmux helpers."""
         try:
             # Use `sh -lc` so $PATH and shell expansions behave as expected
-            cmd_str = " ".join(shlex.quote(x) for x in command)
+            cmd_str = "tmux set -g status off; " + " ".join(shlex.quote(x) for x in command)
             server.cmd(
                 "new-session",
                 "-d",
