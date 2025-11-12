@@ -662,14 +662,7 @@ class APIHandlers:
             mem_mib=mem_mib,
             image=image_path,
         )
-        storage_volume_dir = self.agent_defaults.get("storage", {}).get("volume_dir")
-        if not storage_volume_dir:
-            logger.error("volume_dir not found in agent_defaults")
-            logger.error("agent_defaults structure: %s", self.agent_defaults)
-            raise HTTPException(status_code=500, detail="volume_dir not configured in agent defaults")
-        storage = StorageSpec(
-            driver="file", volume_file=Path(storage_volume_dir) / f"{vm.name}.img"
-        )
+        storage = self._build_storage_spec(vm, obj)
         # Determine networking driver based on payload or agent defaults
         net_defaults = self.agent_defaults.get("net", {}) or {}
         net_payload = obj.get("net") or external_details.get("net") or {}
@@ -745,7 +738,7 @@ class APIHandlers:
             mem_mib=cfg.get("machine-config", {}).get("mem_size_mib", 512),
             image=image_path,
         )
-        storage_spec = StorageSpec(driver="file", volume_file=paths_by_name(vm_name).volume_file)
+        storage_spec = self._build_storage_spec(vm_details, {"cloudstack.vm.details": cfg})
         # Get networking driver from agent defaults
         net_defaults = self.agent_defaults.get("net", {})
         net_spec = NetSpec(
