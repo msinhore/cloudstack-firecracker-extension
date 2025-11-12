@@ -18,7 +18,7 @@ from fastapi import HTTPException
 
 from backend.storage import Paths, StorageError, get_backend_by_driver
 from config import ConfigManager
-from models import Spec, SpecRequest
+from models import Spec, SpecRequest, StorageSpec
 from orchestration import VMLifecycle, VMManager
 from state import StateManager
 from utils.filesystem import paths
