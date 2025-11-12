@@ -35,6 +35,8 @@ class LvmThinBackend(StorageBackend):
             # 2. Create snapshot for VM
             if not lv_exists(self.vg, self.vm_lv):
                 subprocess.run(["lvcreate", "-s", "-n", self.vm_lv, f"{self.vg}/{self.base_name}"], check=True)
+            else:
+                subprocess.run(["lvchange", "-ay", f"{self.vg}/{self.vm_lv}"], check=True)
         except Exception as e:
             raise StorageError(f"Failed to prepare thin volume {self.vg}/{self.vm_lv}: {e}") from e
 
