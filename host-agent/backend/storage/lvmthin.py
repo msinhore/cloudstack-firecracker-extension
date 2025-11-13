@@ -18,6 +18,19 @@ class LvmThinBackend(StorageBackend):
         self.image = image
         self.size_hint = size_hint
 
+    def _activate_lv(self, lv: str) -> None:
+        lv_path = lv if "/" in lv else f"{self.vg}/{lv}"
+        try:
+            subprocess.run(["lvchange", "-kn", lv_path], check=True)
+            subprocess.run(["lvchange", "-ay", lv_path], check=True)
+        except subprocess.CalledProcessError as e:
+            raise StorageError(f"Failed to activate LV {lv_path}: {e}") from e
+
+        try:
+            subprocess.run(["udevadm", "settle"], check=True)
+        except Exception as e:
+            logger.warning("udevadm settle failed for %s: %s", lv_path, e)
+
     def prepare(self) -> None:
         try:
             logger.info("Preparing thin snapshot %s/%s from base %s", self.vg, self.vm_lv, self.base_name)
@@ -27,16 +40,18 @@ class LvmThinBackend(StorageBackend):
                     ["lvcreate", "-V", self.size_hint or "1G", "-T", f"{self.vg}/{self.pool}", "-n", self.base_name],
                     check=True,
                 )
+                self._activate_lv(self.base_name)
                 dev_path = f"/dev/{self.vg}/{self.base_name}"
                 fstype = detect_fstype_from_image(self.image)
                 mkfs_device(dev_path, fstype)
                 # Copy image to base LV
                 copy_image_to_device(self.image, dev_path)
+            else:
+                self._activate_lv(self.base_name)
             # 2. Create snapshot for VM
             if not lv_exists(self.vg, self.vm_lv):
                 subprocess.run(["lvcreate", "-s", "-n", self.vm_lv, f"{self.vg}/{self.base_name}"], check=True)
-            else:
-                subprocess.run(["lvchange", "-ay", f"{self.vg}/{self.vm_lv}"], check=True)
+            self._activate_lv(self.vm_lv)
         except Exception as e:
             raise StorageError(f"Failed to prepare thin volume {self.vg}/{self.vm_lv}: {e}") from e
 

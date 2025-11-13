@@ -1,3 +1,10 @@
+firecracker-cloudstack-agent (0.4.0-7) unstable; urgency=medium
+
+  * Activate thin LVM base/snapshot volumes immediately after creation so
+    Firecracker root disks always appear under /dev/<vg>/<lv>.
+
+ -- Marco Sinhoreli <msinhore@gmail.com>  Thu, 13 Nov 2025 10:26:00 +0000
+
 firecracker-cloudstack-agent (0.4.0-6) unstable; urgency=medium
 
   * Ensure the console endpoint always returns host/port/password by ignoring
