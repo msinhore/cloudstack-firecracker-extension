@@ -1,10 +1,10 @@
 # Firecracker CloudStack Extension & Host Agent
 
-[![Build](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/deb.yml)
+[![Build](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/deb.yml/badge.svg)](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/deb.yml)
 [![Release](https://img.shields.io/github/v/release/msinhore/cloudstack-firecracker-extension?sort=semver)](https://github.com/msinhore/cloudstack-firecracker-extension/releases)
 [![License](https://img.shields.io/github/license/msinhore/cloudstack-firecracker-extension)](LICENSE)
 [![Hypervisor: Firecracker](https://img.shields.io/badge/hypervisor-Firecracker-critical)](https://firecracker-microvm.github.io/)
-[![CloudStack Extension](https://img.shields.io/badge/CloudStack-Extension-Framework-orange)](https://cloudstack.apache.org/)
+[![CloudStack Extension](https://img.shields.io/badge/CloudStack%20Extension%20Framework-orange)](https://cloudstack.apache.org/)
 
 Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](https://firecracker-microvm.github.io/). It offers an external hypervisor extension for the CloudStack management server and a host-side agent that turns each Firecracker node into an HTTPS-controlled API endpoint with PAM authentication and configurable storage/network backends.
 
