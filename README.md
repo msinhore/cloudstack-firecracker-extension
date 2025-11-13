@@ -1,5 +1,11 @@
 # Firecracker CloudStack Extension & Host Agent
 
+[![Build](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/msinhore/cloudstack-firecracker-extension/actions/workflows/deb.yml)
+[![Release](https://img.shields.io/github/v/release/msinhore/cloudstack-firecracker-extension?sort=semver)](https://github.com/msinhore/cloudstack-firecracker-extension/releases)
+[![License](https://img.shields.io/github/license/msinhore/cloudstack-firecracker-extension)](LICENSE)
+[![Hypervisor: Firecracker](https://img.shields.io/badge/hypervisor-Firecracker-critical)](https://firecracker-microvm.github.io/)
+[![CloudStack Extension](https://img.shields.io/badge/CloudStack-Extension-Framework-orange)](https://cloudstack.apache.org/)
+
 Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](https://firecracker-microvm.github.io/). It offers an external hypervisor extension for the CloudStack management server and a host-side agent that turns each Firecracker node into an HTTPS-controlled API endpoint with PAM authentication and configurable storage/network backends.
 
 ---
@@ -153,6 +159,90 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
 | `ui` | `session_timeout_seconds` | integer | `1800` | Idle timeout advertised to the UI; `0` disables automatic logout. |
 | `logging` | `level` | enum | `INFO` | Optional override for the agent logger level (`DEBUG`, `INFO`, etc.). |
 
+### mTLS Configuration Guide
+1. **Generate a CA, server, and client certificate**
+   ```bash
+   sudo install -d -m 0700 /etc/cloudstack/tls-cert
+   cd /etc/cloudstack/tls-cert
+
+   # Certificate Authority
+   sudo openssl req -x509 -nodes -newkey rsa:4096 -keyout ca.key -out ca.crt \
+     -days 3650 -subj "/CN=Firecracker CA"
+
+   # Server certificate signed by the CA
+   sudo openssl req -nodes -newkey rsa:4096 -keyout server.key -out server.csr \
+     -subj "/CN=$(hostname -f)"
+   sudo openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+     -out server.crt -days 825 -sha256 -extensions v3_req \
+     -extfile <(printf "[v3_req]\nsubjectAltName=DNS:$(hostname -f),IP:$(hostname -I | awk '{print $1)}'\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth")
+
+   # Client certificate (copy the resulting files to the CloudStack management node)
+   sudo openssl req -nodes -newkey rsa:4096 -keyout client.key -out client.csr \
+     -subj "/CN=cloudstack"
+   sudo openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+     -out client.crt -days 825 -sha256 -extensions v3_req \
+     -extfile <(printf "[v3_req]\nextendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\nsubjectAltName=DNS:cloudstack\n")
+   sudo chown root:root *.crt *.key
+   sudo chmod 0640 server.key client.key
+   ```
+   Keep `ca.key` and the `.srl` files on the agent host only; distribute `ca.crt`, `client.crt`, and `client.key` securely to the CloudStack management server.
+
+2. **Configure the agent to require mTLS**
+   - In `/etc/cloudstack/firecracker-agent.json`, set:
+     ```json
+     "security": {
+       "tls": {
+         "enabled": true,
+         "cert_file": "/etc/cloudstack/tls-cert/server.crt",
+         "key_file": "/etc/cloudstack/tls-cert/server.key",
+         "ca_file": "/etc/cloudstack/tls-cert/ca.crt",
+         "client_auth": "required"
+       }
+     }
+     ```
+   - Restart the service so the new certificates and policy are picked up:
+     ```bash
+     sudo systemctl restart firecracker-cloudstack-agent.service
+     journalctl -u firecracker-cloudstack-agent.service -g "TLS enabled"
+     ```
+
+3. **Configure the Firecracker client (`firecracker.py`)**
+   - Supply the CA and client credentials in the CloudStack host payload (or flattened keys):
+     ```json
+     {
+       "host_url": "https://firecracker-host.example.com",
+       "host_port": 8443,
+       "client_cert": "/etc/cloudstack/firecracker/client.crt",
+       "client_key": "/etc/cloudstack/firecracker/client.key",
+       "ca_bundle": "/etc/cloudstack/firecracker/ca.crt"
+     }
+     ```
+   - When using the CLI manually, pass the same values inside the JSON spec file so `firecracker.py` can present the client certificate and trust the agent CA.
+
+### Storage Backends (`defaults.storage`)
+- `file` – simple sparse files under `volume_dir`. See `host-agent/firecracker-agent.json-file-example`.
+- `lvm` – logical volumes created in `vg`. Optional `size` sets the LV size when images lack metadata. See `host-agent/firecracker-agent.json-lvm-example`.
+- `lvmthin` – thin-provisioned volumes inside `vg`/`thinpool`. Optional `size` overrides the provisioned size. See `host-agent/firecracker-agent.json-lvmthin-example`.
+
+All storage drivers accept per-request overrides; values here act as defaults.
+
+### Network Backends (`defaults.net`)
+- `linux-bridge-vlan` – attaches tap devices to a Linux bridge and tags VLANs per request. Provide `host_bridge`; optional `uplink` pins the external interface instead of autodetection. See `host-agent/firecracker-agent.json-file-example`.
+- `ovs-vlan` – programs Open vSwitch for VLAN tagging. Provide `host_bridge` (integration bridge) and `uplink`; OVS Python bindings must be installed on the host. See `host-agent/firecracker-agent.json-ovs-example`.
+
+After edits, restart the service:
+```bash
+sudo systemctl restart firecracker-cloudstack-agent.service
+```
+
+### Host Filesystem Layout
+- `/var/log/firecracker` – rolling log files created per VM (`<vm>.log`) and agent runtime diagnostics.
+- `/var/run/firecracker` – transient sockets and PID files used while VMs are running (`<vm>.socket`, `<vm>.pid`).
+- `/var/lib/firecracker/images` – guest rootfs images made available to Firecracker (ext4/RAW, typically referenced by template `image`).
+- `/var/lib/firecracker/kernel` – uncompressed `vmlinux` kernels referenced by template `kernel`.
+- `/var/lib/firecracker/conf` – rendered Firecracker machine configuration JSON files (`<vm>.json`) persisted for troubleshooting.
+- `/var/lib/firecracker/volumes` – disk volumes created when the `file` storage backend is selected.
+- `/var/lib/firecracker/payload` – raw payloads uploaded by CloudStack (cloud-init data, ISO metadata, temporary artifacts).
 
 ### Tmux Access
 - Each VM runs inside a detached tmux session named `fc-<vm_name>`; list active sessions with `tmux ls`.
