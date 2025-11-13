@@ -32,19 +32,14 @@ Firecracker CloudStack bridges Apache CloudStack with [Firecracker microVMs](htt
    ```bash
    sudo apt install -y ./firecracker-cloudstack-agent_<version>_all.deb
    ```
-   The package pulls `python3-pamela`, `python3-uvicorn`, FastAPI, Open vSwitch bindings and other requirements. Post-install scripts:
-   - create `/etc/cloudstack/tls-cert`
-   - generate `ca.crt`, `server.crt`, `server.key`
-   - install `/etc/systemd/system/firecracker-cloudstack-agent.service`
 
 3. **Enable the service**:
    ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now firecracker-cloudstack-agent.service
+    systemctl enable --now firecracker-cloudstack-agent.service
    ```
    Check status:
    ```bash
-   journalctl -u firecracker-cloudstack-agent.service -f
+    systemctl status firecracker-cloudstack-agent.service
    curl -ks https://127.0.0.1:8443/healthz
    ```
 
@@ -64,6 +59,23 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
       "run_dir": "/var/run/firecracker",
       "log_dir": "/var/log/firecracker",
       "payload_dir": "/var/lib/firecracker/payload"
+    },
+    "storage": {
+      "driver": "file",
+      "volume_dir": "/var/lib/firecracker/volumes"
+    },
+    "net": {
+      "driver": "linux-bridge-vlan",
+      "host_bridge": "cloudbr1"
+    },
+    "console": {
+      "bind_host": "0.0.0.0",
+      "port_min": 5900,
+      "port_max": 5999,
+      "geometry": "1024x768x24",
+      "xterm_geometry": "132x44",
+      "font_family": "Monospace",
+      "font_size": 14
     }
   },
   "security": {
@@ -78,6 +90,10 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
   "auth": {
     "enabled": true,
     "service": "firecracker-agent"
+  },
+  "ui": {
+    "enabled": true,
+    "session_timeout_seconds": 1800
   }
 }
 ```
@@ -112,9 +128,20 @@ Main file: `/etc/cloudstack/firecracker-agent.json` (shipped as a conffile). Min
 | `defaults.host` | `payload_dir` | path | `/var/lib/firecracker/payload` | Storage for raw CloudStack payloads (`create-spec-*.json`). |
 | `defaults.storage` | `driver` | enum | `file` | Storage backend: `file`, `lvm`, or `lvmthin`. |
 | `defaults.storage` | `volume_dir` | path | `/var/lib/firecracker/volumes` | Base directory for volume files (required for `file` backend). |
+| `defaults.storage` | `vg` / `volume_group` | string | — | Name of the LVM volume group used by `lvm`/`lvmthin` drivers (required for LVM backends). |
+| `defaults.storage` | `thinpool` | string | — | Thin pool logical volume inside `vg`; required when `driver` is `lvmthin`. |
+| `defaults.storage` | `size` | string | — | Optional size hint (e.g., `50G`) applied when templates omit disk size metadata. |
 | `defaults.net` | `driver` | enum | `linux-bridge-vlan` | Network backend: `linux-bridge-vlan` or `ovs-vlan`. |
+| `defaults.net` | `bridge` | string | — | Optional explicit tap bridge name; falls back to `host_bridge` when unset. |
 | `defaults.net` | `host_bridge` | string | `cloudbr1` | Bridge (Linux or OVS) used to attach VM tap interfaces. |
 | `defaults.net` | `uplink` | string | — | Optional parent interface/uplink used by the backend. |
+| `defaults.console` | `bind_host` | string | `0.0.0.0` | Address where the VNC console bridge binds; use `127.0.0.1` behind SSH tunnels. |
+| `defaults.console` | `port_min` | integer | `5900` | Lower bound of the TCP port range reserved for console sessions. |
+| `defaults.console` | `port_max` | integer | `5999` | Upper bound of the TCP port range reserved for console sessions. |
+| `defaults.console` | `geometry` | string | `1024x768x24` | Virtual framebuffer size and color depth for the Xvfb display used per VM. |
+| `defaults.console` | `xterm_geometry` | string | `132x44` | xterm window geometry for console shell helper. |
+| `defaults.console` | `font_family` | string | `Monospace` | Font family enforced inside the xterm console helper. |
+| `defaults.console` | `font_size` | integer | `14` | Font point size used by the xterm helper. |
 | `security.tls` | `enabled` | boolean | `true` | Enables HTTPS for the API/UI. |
 | `security.tls` | `cert_file` | path | `/etc/cloudstack/tls-cert/server.crt` | Server certificate presented to clients. |
 | `security.tls` | `key_file` | path | `/etc/cloudstack/tls-cert/server.key` | Private key paired with `cert_file`. |
@@ -238,6 +265,12 @@ sudo systemctl restart firecracker-cloudstack-agent.service
    - `image`: filename stored in `defaults.host.image_dir` (for example `alpine-3.22.ext4`).
    - `boot_args`: optional kernel command line, e.g. `console=ttyS0 reboot=k panic=1 pci=off ip=dhcp`.
    Provide filenames only; the agent resolves them against its configured directories on each host.
+
+---
+## Host HOWTOs
+- [Network configuration](docs/network.md) – VLAN-aware Linux bridges, OVS setup, persistence tips and validation commands.
+- [Storage backends](docs/storage.md) – File, LVM, and LVM-thin workflows, including NFS-backed directories and thin-pool tuning.
+- [Security hardening](docs/security.md) – TLS/mTLS generation, PAM authentication, and guidance for internal certificates.
 
 ---
 ## Troubleshooting
