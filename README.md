@@ -6,7 +6,7 @@
 [![Hypervisor: Firecracker](https://img.shields.io/badge/hypervisor-Firecracker-critical)](https://firecracker-microvm.github.io/)
 [![CloudStack Extension](https://img.shields.io/badge/CloudStack%20Extension%20Framework-orange)](https://cloudstack.apache.org/)
 
-Firecracker CloudStack bridges [Apache CloudStack](https://cloudstack.apache.org/) with [Firecracker microVMs](https://firecracker-microvm.github.io/). It offers an external hypervisor extension for the CloudStack management server and a host-side agent that turns each Firecracker node into an HTTPS-controlled API endpoint with PAM authentication and configurable storage/network backends.
+Firecracker CloudStack Extension bridges [Apache CloudStack](https://cloudstack.apache.org/) with [Firecracker microVMs](https://firecracker-microvm.github.io/). It offers an external hypervisor extension for the CloudStack management server and a host-side agent that turns each Firecracker node into an HTTPS-controlled API endpoint with PAM authentication and configurable storage/network backends.
 
 ---
 ## Components
