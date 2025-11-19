@@ -14,6 +14,7 @@ metadata:
 source:
   type: git
   url: "https://github.com/msinhore/cloudstack-firecracker-extension"
+  refs: "main"
   
 spec:
   type: Orchestrator
